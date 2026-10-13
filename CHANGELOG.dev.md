@@ -7,6 +7,14 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Added
+
+- 选中邮件后，图片附件直接显示在正文下方，可拖动分隔线调整高度；无法解码或不可用的图片标注原因。
+  - 引擎 `attachment` 操作返回 base64 附件字节（≤ 32 MB）；预览 `attachments[].image` 按 MIME `image/*` 或扩展名标记。
+  - `MainViewController+Images`：逐张请求 + 选中切换即取消；`CGImageSourceCreateThumbnailAtIndex` 后台按预览区像素宽度解码（长边 ≤ 4096）。
+
 ## [0.2.10] - 2026-10-13
 
 ### Added

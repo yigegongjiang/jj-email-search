@@ -84,6 +84,13 @@ struct MailAttachment: Decodable, Sendable {
     let name: String
     let size: Int
     let available: Bool
+    /// 图片 MIME / 扩展名; App 解码成功才渲染.
+    let image: Bool
+}
+
+/// JSONDecoder 默认按 base64 解码 Data.
+struct AttachmentData: Decodable, Sendable {
+    let data: Data
 }
 
 struct MailPreview: Decodable, Sendable {

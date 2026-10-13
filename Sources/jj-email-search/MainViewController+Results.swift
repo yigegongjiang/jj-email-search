@@ -82,6 +82,7 @@ extension MainViewController {
         highlightTask?.cancel(); highlightSequence += 1
         previewID = item?.id; preview = nil
         attachments.removeAllItems(); attachments.addItem(withTitle: "无附件"); attachments.isEnabled = false
+        clearImages()
         headerScroll?.isHidden = item == nil
         updateActions()
         guard let item else {
@@ -102,28 +103,31 @@ extension MainViewController {
                 )
                 guard !Task.isCancelled, previewSequence == version else { return }
                 preview = value
-                attachments.removeAllItems()
-                for (position, attachment) in value.attachments.enumerated() {
-                    let attachmentSize = ByteCountFormatter.string(
-                        fromByteCount: Int64(attachment.size), countStyle: .file
-                    )
-                    let availability = attachment.available ? "" : "（不可用）"
-                    // 序号 / 总数: 弹出框收起时也能看出共几个附件.
-                    attachments.addItem(withTitle: "附件 \(position + 1)/\(value.attachments.count) · "
-                        + "\(attachment.name) · \(attachmentSize)\(availability)")
-                    attachments.lastItem?.representedObject = attachment.index
-                }
-                attachments.isEnabled = !value.attachments.isEmpty
-                if value.attachments.isEmpty {
-                    attachments.addItem(withTitle: "无附件")
-                }
+                fillAttachments(value)
                 updatePreviewBody()
                 updateActions()
+                loadImages(value, id: item.id, version: version)
             } catch {
                 if previewSequence == version {
                     body.string = error.localizedDescription
                 }
             }
+        }
+    }
+
+    private func fillAttachments(_ value: MailPreview) {
+        attachments.removeAllItems()
+        for (position, attachment) in value.attachments.enumerated() {
+            let attachmentSize = ByteCountFormatter.string(fromByteCount: Int64(attachment.size), countStyle: .file)
+            let availability = attachment.available ? "" : "（不可用）"
+            // 序号 / 总数: 弹出框收起时也能看出共几个附件.
+            attachments.addItem(withTitle: "附件 \(position + 1)/\(value.attachments.count) · "
+                + "\(attachment.name) · \(attachmentSize)\(availability)")
+            attachments.lastItem?.representedObject = attachment.index
+        }
+        attachments.isEnabled = !value.attachments.isEmpty
+        if value.attachments.isEmpty {
+            attachments.addItem(withTitle: "无附件")
         }
     }
 

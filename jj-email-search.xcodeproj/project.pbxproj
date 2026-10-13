@@ -18,6 +18,7 @@
 		B00000000000000000000003 /* AccessibilityControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013; };
 		C00000000000000000000001 /* Third-party notices */ = {isa = PBXBuildFile; fileRef = C00000000000000000000011; };
 		B00000000000000000000006 /* MainViewController+Highlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016; };
+		B00000000000000000000007 /* MainViewController+Images.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000017; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		B00000000000000000000013 /* AccessibilityControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityControls.swift; sourceTree = "<group>"; };
 		C00000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = text; path = THIRD_PARTY_NOTICES.txt; sourceTree = "<group>"; };
 		B00000000000000000000016 /* MainViewController+Highlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MainViewController+Highlight.swift"; sourceTree = "<group>"; };
+		B00000000000000000000017 /* MainViewController+Images.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MainViewController+Images.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -49,7 +51,7 @@
 		};
 		A00000000000000000000032 /* jj-email-search */ = {
 			isa = PBXGroup;
-			children = (B00000000000000000000016 /* MainViewController+Highlight.swift */, A00000000000000000000011 /* main.swift */, A00000000000000000000012 /* AppDelegate.swift */, A00000000000000000000016 /* MainViewController.swift */, B00000000000000000000014 /* MainViewController+Results.swift */, A00000000000000000000017 /* ConfigStore.swift */, B00000000000000000000013 /* AccessibilityControls.swift */, B00000000000000000000012 /* SettingsViewController.swift */, B00000000000000000000015 /* SettingsViewController+Remove.swift */, B00000000000000000000011 /* MailEngine.swift */, A00000000000000000000015 /* Assets.xcassets */);
+			children = (B00000000000000000000016 /* MainViewController+Highlight.swift */, B00000000000000000000017 /* MainViewController+Images.swift */, A00000000000000000000011 /* main.swift */, A00000000000000000000012 /* AppDelegate.swift */, A00000000000000000000016 /* MainViewController.swift */, B00000000000000000000014 /* MainViewController+Results.swift */, A00000000000000000000017 /* ConfigStore.swift */, B00000000000000000000013 /* AccessibilityControls.swift */, B00000000000000000000012 /* SettingsViewController.swift */, B00000000000000000000015 /* SettingsViewController+Remove.swift */, B00000000000000000000011 /* MailEngine.swift */, A00000000000000000000015 /* Assets.xcassets */);
 			path = "Sources/jj-email-search";
 			sourceTree = "<group>";
 		};
@@ -104,7 +106,7 @@
 		A00000000000000000000051 = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (B00000000000000000000006 /* MainViewController+Highlight.swift in Sources */,A00000000000000000000001 /* main.swift in Sources */, A00000000000000000000002 /* AppDelegate.swift in Sources */, A00000000000000000000004 /* MainViewController.swift in Sources */, B00000000000000000000004 /* MainViewController+Results.swift in Sources */, B00000000000000000000001 /* MailEngine.swift in Sources */, B00000000000000000000002 /* SettingsViewController.swift in Sources */, B00000000000000000000005 /* SettingsViewController+Remove.swift in Sources */, B00000000000000000000003 /* AccessibilityControls.swift in Sources */, A00000000000000000000005 /* ConfigStore.swift in Sources */);
+			files = (B00000000000000000000006 /* MainViewController+Highlight.swift in Sources */, B00000000000000000000007 /* MainViewController+Images.swift in Sources */,A00000000000000000000001 /* main.swift in Sources */, A00000000000000000000002 /* AppDelegate.swift in Sources */, A00000000000000000000004 /* MainViewController.swift in Sources */, B00000000000000000000004 /* MainViewController+Results.swift in Sources */, B00000000000000000000001 /* MailEngine.swift in Sources */, B00000000000000000000002 /* SettingsViewController.swift in Sources */, B00000000000000000000005 /* SettingsViewController+Remove.swift in Sources */, B00000000000000000000003 /* AccessibilityControls.swift in Sources */, A00000000000000000000005 /* ConfigStore.swift in Sources */);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */

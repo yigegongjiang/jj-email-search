@@ -24,6 +24,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     var previewTask: Task<Void, Never>?
     private var sequence = 0
     var previewSequence = 0
+    var images = ImageArea()
     var highlightTerms: [HighlightTerm] = []
     var highlightTask: Task<Void, Never>?
     var highlightSequence = 0
@@ -166,9 +167,10 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         self.headerScroll = headerScroll
         let bodyScroll = NSScrollView()
         bodyScroll.documentView = body; bodyScroll.hasVerticalScroller = true
-        let pane = NSStackView(views: [controls, headerScroll, bodyScroll])
+        configureImageArea(below: bodyScroll)
+        let pane = NSStackView(views: [controls, headerScroll, images.split])
         pane.orientation = .vertical; pane.alignment = .leading; pane.spacing = 2
-        for child in [controls, headerScroll, bodyScroll] {
+        for child in [controls, headerScroll, images.split] {
             child.widthAnchor.constraint(equalTo: pane.widthAnchor).isActive = true
         }
         return pane

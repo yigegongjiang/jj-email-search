@@ -48,12 +48,12 @@ macOS 邮件检索应用：只读接入 Thunderbird 已下载邮件，提供本�
 - 删除已同步：仅删除本 App 索引 / 邮件副本并回收空间，Thunderbird 不变；来源已不存在的已同步文件夹也列出，仅可删除。
 - 主窗口：选择已同步文件夹 / 字段，输入关键词；支持 AND / OR / NOT、双引号短语（整串 `"..."` / `field:"..."` = 原样逐字精确匹配）、`subject:` / `sender:` / `recipients:` / `body:` 前缀；语法不完整时按关键词检索；空查询显示全部邮件；修改 / 清空输入立即取消进行中的检索。
 - 键盘：⌘F 聚焦搜索；↓ / ↩ 进入结果列表；点击列头排序。
-- 列表完整返回所有命中，默认按日期倒序；预览高亮当前检索的匹配词（遵循字段限定 / NOT），正文定位首个匹配处；可切换本封正文 / 含引用全文；原文与可用附件支持导出，禁止写入源目录。
+- 列表完整返回所有命中，默认按日期倒序；预览高亮当前检索的匹配词（遵循字段限定 / NOT），正文定位首个匹配处；可切换本封正文 / 含引用全文；图片附件在正文下方分栏按预览区宽度渲染（单封 ≤ 30 张，单张 ≤ 32 MB，无图片时隐藏）；原文与可用附件支持导出，禁止写入源目录。
 - 不完整内容以 ⚠ 标记；正文未下载的邮件不从服务器补取，先由 Thunderbird 下载后再同步。
 - 数据目录：`~/.config/jj-email-search/mail-index/`；含原文与索引，备份需覆盖完整目录。
 
 ## 诊断
 
 - Rust CLI：`Engine/target/release/jj-email-engine discover` / `inspect <folder-name> <account>`；`serve <data-directory>` 接收逐行 JSON 请求，使用与 App 相同的引擎。
-- AX 标识：`open-sync-settings` / `source-folders` / `sync-selected-folders` / `remove-synced-folders` / `cancel-sync` / `search-folder` / `search-field` / `mail-search` / `mail-results` / `preview-mode`。
+- AX 标识：`open-sync-settings` / `source-folders` / `sync-selected-folders` / `remove-synced-folders` / `cancel-sync` / `search-folder` / `search-field` / `mail-search` / `mail-results` / `preview-mode` / `attachment-images` / `attachment-image-{附件序号}` / `attachment-caption-{附件序号}`。
 - 表格 AXValue 为从 0 开始的行号，逗号分隔多选；下拉框 AXValue 接受标题或字段 / 文件夹 / 预览模式 (`own` / `full`) 标识。

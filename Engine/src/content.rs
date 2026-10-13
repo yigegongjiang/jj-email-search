@@ -23,6 +23,8 @@ pub struct Attachment {
     pub name: String,
     pub size: usize,
     pub available: bool,
+    /// Image MIME type or image file extension; the App still decodes before rendering.
+    pub image: bool,
 }
 #[derive(Serialize)]
 pub struct Preview {
@@ -145,6 +147,7 @@ pub fn preview(raw: &[u8]) -> Result<Preview> {
             name: a.attachment_name().unwrap_or("attachment").into(),
             size: a.contents().len(),
             available: attachment_available(a),
+            image: is_image(a),
         })
         .collect();
     Ok(Preview {
@@ -157,6 +160,19 @@ pub fn preview(raw: &[u8]) -> Result<Preview> {
         attachments,
         complete: !message.parts.iter().any(|p| p.is_encoding_problem),
     })
+}
+
+fn is_image(part: &mail_parser::MessagePart<'_>) -> bool {
+    // Many mailers send photos as application/octet-stream; the file extension decides then.
+    part.content_type()
+        .is_some_and(|t| t.c_type.eq_ignore_ascii_case("image"))
+        || part.attachment_name().is_some_and(|n| {
+            n.rsplit_once('.').is_some_and(|(_, e)| {
+                ["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif"]
+                    .iter()
+                    .any(|x| e.eq_ignore_ascii_case(x))
+            })
+        })
 }
 
 pub fn attachment_available(part: &mail_parser::MessagePart<'_>) -> bool {

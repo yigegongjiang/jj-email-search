@@ -92,6 +92,12 @@ pub fn dispatch(engine: &mut Engine, v: &Value) -> Result<Value> {
             Ok(json!({"ranges": crate::highlight::ranges(&texts, &terms)}))
         }
         "preview" => engine.preview(get_str(v, "id")?),
+        "attachment" => engine.attachment_data(
+            get_str(v, "id")?,
+            v.get("attachment")
+                .and_then(Value::as_u64)
+                .context("Missing attachment")? as u32,
+        ),
         "export" => engine.export(
             get_str(v, "id")?,
             v.get("attachment")

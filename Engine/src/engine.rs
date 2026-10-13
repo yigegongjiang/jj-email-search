@@ -1,5 +1,6 @@
 use crate::thunderbird::{self, Folder};
 use anyhow::{Context, Result, ensure};
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -580,21 +581,31 @@ impl Engine {
             &self.raw(key)?,
         )?)?)
     }
+    fn attachment(&self, key: &str, index: u32) -> Result<Vec<u8>> {
+        let raw = self.raw(key)?;
+        let m = mail_parser::MessageParser::default()
+            .parse(&raw)
+            .context("Cannot parse MIME")?;
+        let p = m.attachment(index).context("Attachment missing")?;
+        ensure!(
+            crate::content::attachment_available(p),
+            "附件编码损坏，无法导出"
+        );
+        Ok(p.contents().to_vec())
+    }
+    /// Base64 bytes for in-App image preview; capped so one reply never builds a huge JSON string.
+    pub fn attachment_data(&mut self, key: &str, index: u32) -> Result<Value> {
+        const MAX_BYTES: usize = 32 << 20;
+        self.reader.reload()?;
+        let data = self.attachment(key, index)?;
+        ensure!(data.len() <= MAX_BYTES, "附件超过 32 MB，不预览");
+        Ok(json!({ "data": base64::engine::general_purpose::STANDARD.encode(data) }))
+    }
     pub fn export(&mut self, key: &str, attachment: Option<u32>, dest: &Path) -> Result<Value> {
         self.reader.reload()?;
-        let raw = self.raw(key)?;
-        let data = if let Some(i) = attachment {
-            let m = mail_parser::MessageParser::default()
-                .parse(&raw)
-                .context("Cannot parse MIME")?;
-            let p = m.attachment(i).context("Attachment missing")?;
-            ensure!(
-                crate::content::attachment_available(p),
-                "附件编码损坏，无法导出"
-            );
-            p.contents().to_vec()
-        } else {
-            raw
+        let data = match attachment {
+            Some(i) => self.attachment(key, i)?,
+            None => self.raw(key)?,
         };
         let parent = dest.parent().context("Invalid output path")?;
         let canonical = fs::canonicalize(parent)?;

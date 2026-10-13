@@ -11,6 +11,12 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- 选中邮件后，图片附件直接显示在正文下方，可拖动分隔线调整高度；无法解码或不可用的图片标注原因。
+
 ## [0.2.10] - 2026-10-13
 
 ### Added
