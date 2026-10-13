@@ -1,4 +1,5 @@
-//! Highlight indexed tokens, with the same analyzer and field scope as search.
+//! Highlight indexed tokens, with the same analyzer and field scope as search;
+//! literal terms mark verbatim occurrences only.
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};
 use tantivy::{
@@ -11,6 +12,17 @@ use tantivy::{
 pub struct HighlightTerm {
     field: String,
     text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    literal: bool,
+}
+impl HighlightTerm {
+    pub fn literal(field: &str, text: &str) -> Self {
+        Self {
+            field: field.into(),
+            text: text.into(),
+            literal: true,
+        }
+    }
 }
 #[derive(Deserialize)]
 pub struct HighlightText {
@@ -40,6 +52,7 @@ pub fn terms(query: &dyn Query, schema: &Schema) -> BTreeSet<HighlightTerm> {
                 result.insert(HighlightTerm {
                     field: field.into(),
                     text: text.into(),
+                    literal: false,
                 });
             }
         });
@@ -54,20 +67,28 @@ pub fn ranges(texts: &[HighlightText], terms: &[HighlightTerm]) -> Vec<Vec<Highl
     texts
         .iter()
         .map(|input| {
-            let wanted: HashSet<&str> = terms
-                .iter()
-                .filter(|term| term.field == input.field)
+            let field = terms.iter().filter(|term| term.field == input.field);
+            let wanted: HashSet<&str> = field
+                .clone()
+                .filter(|term| !term.literal)
                 .map(|term| term.text.as_str())
                 .collect();
-            if wanted.is_empty() {
-                return Vec::new();
-            }
-            let mut bytes = Vec::new();
-            let mut stream = analyzer.token_stream(&input.text);
-            while stream.advance() {
-                let token = stream.token();
-                if wanted.contains(token.text.as_str()) {
-                    bytes.push((token.offset_from, token.offset_to));
+            let mut bytes: Vec<(usize, usize)> = field
+                .filter(|term| term.literal && !term.text.is_empty())
+                .flat_map(|term| {
+                    input
+                        .text
+                        .match_indices(term.text.as_str())
+                        .map(|(start, s)| (start, start + s.len()))
+                })
+                .collect();
+            if !wanted.is_empty() {
+                let mut stream = analyzer.token_stream(&input.text);
+                while stream.advance() {
+                    let token = stream.token();
+                    if wanted.contains(token.text.as_str()) {
+                        bytes.push((token.offset_from, token.offset_to));
+                    }
                 }
             }
             bytes.sort_unstable();

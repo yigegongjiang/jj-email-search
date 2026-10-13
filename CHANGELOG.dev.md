@@ -7,6 +7,19 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Added
+
+- 整串双引号输入（如 `"金和平"`、`subject:"金和平"`）按原样精确匹配：大小写、空格、标点逐字一致，只高亮整串；状态栏标注「精确匹配」。
+  - `literal_query` 识别整串 `"..."`；`literal_candidates` 用 RegexQuery 在分词词典取超集，再按字段原文 `contains` 校验（正文 = `own_text`，按 digest 缓存 ≤ 64 MiB）。
+  - 带 `~N` / `*` / `^` 或混合表达式仍走 QueryParser 短语；高亮 `HighlightTerm.literal` 走 `match_indices`。
+
+### Fixed
+
+- 修改或清空检索框时立即停止正在进行的检索，不再持续占用 CPU。
+  - Swift 为每次检索分配递增 `search_id`；任务取消调用 `jj_engine_cancel_search`（`fetch_max`），扫描逐封检查后中止。
+
 ## [0.2.9] - 2026-10-13
 
 ### Changed

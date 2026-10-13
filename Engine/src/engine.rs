@@ -16,7 +16,7 @@ use tantivy::schema::Value as _;
 use tantivy::{
     DocAddress, DocId, Index, IndexReader, IndexWriter, Score, SegmentOrdinal, SegmentReader, Term,
     collector::{Collector, SegmentCollector},
-    query::{AllQuery, BooleanQuery, Occur, Query, QueryParser, TermQuery},
+    query::{AllQuery, BooleanQuery, Occur, Query, QueryParser, RegexQuery, TermQuery},
     schema::*,
 };
 
@@ -28,6 +28,13 @@ struct MetadataCache {
     bytes: usize,
     values: HashMap<(u32, u32), Item>,
 }
+/// Literal-search body text keyed by content digest: stays valid across merges,
+/// and is cleared wholesale at the budget so memory never grows with uptime.
+#[derive(Default)]
+struct TextCache {
+    bytes: usize,
+    values: HashMap<String, Arc<str>>,
+}
 #[derive(Default)]
 pub struct Progress {
     pub current: AtomicU64,
@@ -35,6 +42,8 @@ pub struct Progress {
     pub imported: AtomicU64,
     pub bytes: AtomicU64,
     pub cancelled: AtomicBool,
+    /// Highest cancelled search id; independent of sync, never reset.
+    pub search_cancelled: AtomicU64,
 }
 impl Progress {
     pub fn reset(&self) {
@@ -113,6 +122,7 @@ pub struct Engine {
     pub directory: PathBuf,
     pub progress: Arc<Progress>,
     cache: std::sync::Mutex<MetadataCache>,
+    texts: std::sync::Mutex<TextCache>,
 }
 impl Engine {
     pub fn open(directory: &Path, progress: Arc<Progress>) -> Result<Self> {
@@ -177,6 +187,7 @@ impl Engine {
             directory: directory.into(),
             progress,
             cache: std::sync::Mutex::new(MetadataCache::default()),
+            texts: std::sync::Mutex::new(TextCache::default()),
         };
         let manifest = engine.manifest()?;
         ensure!(
@@ -198,9 +209,28 @@ impl Engine {
             json!({"version":VERSION,"folders":m.folders.values().collect::<Vec<_>>(),"count":self.reader.searcher().num_docs()}),
         )
     }
-    pub fn search(&mut self, folder_ids: &[String], text: &str, field: &str) -> Result<Value> {
+    pub fn search(
+        &mut self,
+        folder_ids: &[String],
+        text: &str,
+        field: &str,
+        search_id: Option<u64>,
+    ) -> Result<Value> {
         let start = Instant::now();
         self.reader.reload()?;
+        if let Some((fields, needle)) = literal_query(text, field) {
+            let searcher = self.reader.searcher();
+            let addresses = self.literal(&searcher, folder_ids, &fields, needle, search_id)?;
+            let mut items = self.items(&searcher, &addresses)?;
+            items.sort_unstable_by(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)));
+            let highlight_terms: Vec<_> = fields
+                .iter()
+                .map(|f| crate::highlight::HighlightTerm::literal(f, needle))
+                .collect();
+            return Ok(
+                json!({"items":items,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"count":addresses.len(),"relaxed":false,"literal":true,"highlight_terms":highlight_terms}),
+            );
+        }
         let f = &self.fields;
         let fields = match field {
             "subject" => vec![f.subject],
@@ -234,6 +264,184 @@ impl Engine {
         Ok(
             json!({"items":items,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"count":addresses.len(),"relaxed":relaxed,"highlight_terms":highlight_terms}),
         )
+    }
+    /// Verbatim substring scan over the same text the tokenized fields index; checked
+    /// for cancellation per message so a superseded search releases the CPU at once.
+    fn literal(
+        &self,
+        searcher: &tantivy::Searcher,
+        folder_ids: &[String],
+        fields: &[&str],
+        needle: &str,
+        search_id: Option<u64>,
+    ) -> Result<Vec<DocAddress>> {
+        let cancelled = || {
+            search_id.is_some_and(|id| self.progress.search_cancelled.load(Ordering::Relaxed) >= id)
+        };
+        ensure!(!cancelled(), "检索已取消");
+        // Term-dictionary regex walks dominate here; segments walk in parallel.
+        let mut candidates = searcher.search_with_executor(
+            self.scoped(self.literal_candidates(fields, needle)?, folder_ids)
+                .as_ref(),
+            &AllIds,
+            &tantivy::Executor::multi_thread(
+                searcher.segment_readers().len().clamp(1, 8),
+                "literal-",
+            )?,
+            tantivy::query::EnableScoring::disabled_from_searcher(searcher),
+        )?;
+        candidates.sort_unstable();
+        let body = fields.contains(&"body");
+        let columns = searcher
+            .segment_readers()
+            .iter()
+            .map(|segment| {
+                let fast = segment.fast_fields();
+                fields
+                    .iter()
+                    .filter(|f| **f != "body")
+                    .chain(&["digest"])
+                    .map(|f| fast.str(f))
+                    .collect::<tantivy::Result<Vec<_>>>()
+            })
+            .collect::<tantivy::Result<Vec<_>>>()?;
+        // Mail sizes vary by orders of magnitude: a shared cursor balances threads, and
+        // ascending doc order keeps each thread's doc-store reads mostly sequential.
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let threads = std::thread::available_parallelism()
+            .map_or(4, |n| n.get().min(8))
+            .min(candidates.len().max(1));
+        let found = std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..threads)
+                .map(|_| {
+                    scope.spawn(|| -> Result<Vec<DocAddress>> {
+                        let mut stores = HashMap::new();
+                        let mut found = Vec::new();
+                        let mut value = String::new();
+                        while let Some(&address) =
+                            candidates.get(next.fetch_add(1, Ordering::Relaxed))
+                        {
+                            ensure!(!cancelled(), "检索已取消");
+                            let (ord, doc) = (address.segment_ord, address.doc_id);
+                            let mut hit = false;
+                            let (digest, headers) = columns[ord as usize].split_last().unwrap();
+                            for column in headers.iter().flatten() {
+                                if let Some(n) = column.term_ords(doc).next() {
+                                    value.clear();
+                                    column.ord_to_str(n, &mut value)?;
+                                    if value.contains(needle) {
+                                        hit = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if !hit && body {
+                                let store = match stores.entry(ord) {
+                                    std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                                    std::collections::hash_map::Entry::Vacant(e) => {
+                                        e.insert(searcher.segment_reader(ord).get_store_reader(4)?)
+                                    }
+                                };
+                                value.clear();
+                                if let Some(c) = digest
+                                    && let Some(n) = c.term_ords(doc).next()
+                                {
+                                    c.ord_to_str(n, &mut value)?;
+                                }
+                                let cached = self
+                                    .texts
+                                    .lock()
+                                    .ok()
+                                    .and_then(|t| t.values.get(&value).cloned());
+                                let text = match cached {
+                                    Some(text) => text,
+                                    None => {
+                                        let d: TantivyDocument = store.get(doc)?;
+                                        let text: Arc<str> = d
+                                            .get_first(self.fields.raw)
+                                            .and_then(|v| v.as_bytes())
+                                            .and_then(|raw| {
+                                                mail_parser::MessageParser::default().parse(raw)
+                                            })
+                                            .map(|m| crate::content::own_text(&m))
+                                            .unwrap_or_default()
+                                            .into();
+                                        if !value.is_empty()
+                                            && let Ok(mut t) = self.texts.lock()
+                                        {
+                                            let size = value.len() + text.len();
+                                            if t.bytes + size > 64 * 1024 * 1024 {
+                                                t.values.clear();
+                                                t.bytes = 0;
+                                            }
+                                            t.bytes += size;
+                                            t.values.insert(value.clone(), text.clone());
+                                        }
+                                        text
+                                    }
+                                };
+                                hit = text.contains(needle);
+                            }
+                            if hit {
+                                found.push(address);
+                            }
+                        }
+                        Ok(found)
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .map(|w| w.join().map_err(|_| anyhow::anyhow!("检索线程异常"))?)
+                .collect::<Result<Vec<_>>>()
+        })?;
+        Ok(found.into_iter().flatten().collect())
+    }
+    /// Superset of literal hits from the token index: every Chinese char lies inside some
+    /// Jieba token and every other alphanumeric run inside some lowercased word token.
+    fn literal_candidates(&self, fields: &[&str], needle: &str) -> Result<Box<dyn Query>> {
+        let mut pieces = Vec::<String>::new();
+        let mut word = String::new();
+        for c in needle.chars().chain([' ']) {
+            if !crate::tokenizer::chinese(c) && c.is_alphanumeric() {
+                word.push(c);
+                continue;
+            }
+            // Σ lowercases by context; skipping the run keeps the filter a superset.
+            if !word.is_empty() && !word.contains('Σ') {
+                pieces.push(word.to_lowercase());
+            }
+            word.clear();
+            if crate::tokenizer::chinese(c) {
+                pieces.push(c.into());
+            }
+        }
+        pieces.sort_unstable_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        pieces.dedup();
+        pieces.truncate(8);
+        if pieces.is_empty() {
+            return Ok(Box::new(AllQuery));
+        }
+        let schema = self.index.schema();
+        let mut per_field = Vec::new();
+        for name in fields {
+            let field = schema.get_field(name)?;
+            let all = pieces
+                .iter()
+                .map(|p| {
+                    let pattern = format!(".*{}.*", regex::escape(p));
+                    Ok((
+                        Occur::Must,
+                        Box::new(RegexQuery::from_pattern(&pattern, field)?) as Box<dyn Query>,
+                    ))
+                })
+                .collect::<tantivy::Result<Vec<_>>>()?;
+            per_field.push((
+                Occur::Should,
+                Box::new(BooleanQuery::new(all)) as Box<dyn Query>,
+            ));
+        }
+        Ok(Box::new(BooleanQuery::new(per_field)))
     }
     fn scoped(&self, query: Box<dyn Query>, folders: &[String]) -> Box<dyn Query> {
         if folders.is_empty() {
@@ -736,6 +944,24 @@ impl Engine {
 }
 const QUERY_FIELDS: [&str; 4] = ["subject", "sender", "recipients", "body"];
 const QUERY_SPECIAL: &str = "+-^`:{}\"'[]()!\\*";
+/// Only a whole `"..."` (optionally `field:"..."`) is verbatim; `~N` / `*` / `^` suffixes
+/// and mixed queries keep QueryParser phrase semantics.
+fn literal_query<'a>(text: &'a str, field: &'a str) -> Option<(Vec<&'static str>, &'a str)> {
+    let text = text.trim();
+    let (prefix, rest) = QUERY_FIELDS
+        .iter()
+        .find_map(|f| Some((Some(*f), text.strip_prefix(f)?.strip_prefix(':')?)))
+        .unwrap_or((None, text));
+    let needle = rest.strip_prefix('"')?.strip_suffix('"')?;
+    if needle.is_empty() || needle.contains('"') {
+        return None;
+    }
+    let fields = match prefix.or_else(|| QUERY_FIELDS.iter().copied().find(|f| *f == field)) {
+        Some(f) => vec![f],
+        None => QUERY_FIELDS.to_vec(),
+    };
+    Some((fields, needle))
+}
 /// Mail text is full of `Re:` / URLs / apostrophes: only `field:` prefixes stay syntax.
 /// `plain` escapes every operator so any input parses as keywords.
 fn escape_query(text: &str, plain: bool) -> String {

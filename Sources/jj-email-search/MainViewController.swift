@@ -209,6 +209,14 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         scheduleSearch()
     }
 
+    private func summary(_ result: SearchResult, query: String, milliseconds: Double) -> String {
+        guard libraryCount > 0 else { return "尚未同步邮件；点击右上角「同步设置」开始。" }
+        let scope = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "共" : "找到"
+        return "\(scope) \(result.count) 封 · \(Int(milliseconds.rounded())) ms"
+            + (result.relaxed ? " · 查询语法不完整，已按关键词检索" : "")
+            + (result.literal == true ? " · 精确匹配" : "")
+    }
+
     private func scheduleSearch(immediate: Bool = false) {
         queryTask?.cancel()
         sequence += 1
@@ -246,11 +254,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 let elapsed = start.duration(to: .now)
                 let elapsedMilliseconds = Double(elapsed.components.seconds) * 1000 +
                     Double(elapsed.components.attoseconds) / 1e15
-                let scope = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "共" : "找到"
-                status.stringValue = libraryCount <= 0
-                    ? "尚未同步邮件；点击右上角「同步设置」开始。"
-                    : "\(scope) \(result.count) 封 · \(Int(elapsedMilliseconds.rounded())) ms"
-                    + (result.relaxed ? " · 查询语法不完整，已按关键词检索" : "")
+                status.stringValue = summary(result, query: query, milliseconds: elapsedMilliseconds)
                 if previewID == nil {
                     body.string = placeholder
                 }

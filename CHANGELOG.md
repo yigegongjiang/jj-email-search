@@ -11,6 +11,16 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- 整串双引号输入（如 `"金和平"`、`subject:"金和平"`）按原样精确匹配：大小写、空格、标点逐字一致，只高亮整串；状态栏标注「精确匹配」。
+
+### Fixed
+
+- 修改或清空检索框时立即停止正在进行的检索，不再持续占用 CPU。
+
 ## [0.2.9] - 2026-10-13
 
 ### Changed

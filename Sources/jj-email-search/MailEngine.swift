@@ -54,9 +54,11 @@ struct SearchResult: Decodable, Sendable {
     let count: Int
     /// 查询语法不完整时按纯关键词检索.
     let relaxed: Bool
+    /// 整串双引号输入按原样逐字匹配.
+    let literal: Bool?
     let highlightTerms: [HighlightTerm]
     enum CodingKeys: String, CodingKey {
-        case items, count, relaxed
+        case items, count, relaxed, literal
         case elapsedMs = "elapsed_ms"
         case highlightTerms = "highlight_terms"
     }
@@ -65,6 +67,7 @@ struct SearchResult: Decodable, Sendable {
 struct HighlightTerm: Codable, Sendable {
     let field: String
     let text: String
+    var literal: Bool?
 }
 
 struct HighlightResult: Decodable, Sendable {
@@ -128,9 +131,11 @@ struct EngineRequest: Encodable, Sendable {
     var attachment: Int?
     var terms: [HighlightTerm]?
     var texts: [HighlightTerm]?
+    var searchID: UInt64?
     enum CodingKeys: String, CodingKey {
         case operation = "op"
         case root, folders, query, field, id, path, attachment, terms, texts
+        case searchID = "search_id"
     }
 }
 
@@ -170,6 +175,8 @@ final class MailEngine: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.yigegongjiang.jj-email-search.engine", qos: .userInitiated)
     private let lock = NSLock()
     private var activeSyncs = 0
+    /// 单调递增: 取消只作用于该 id 及更早的检索, 不误伤后续检索.
+    private var searchCount: UInt64 = 0
     /// 同步占用串行队列期间, 检索 / 预览排队至同步结束.
     var isSyncing: Bool {
         lock.withLock { activeSyncs > 0 }
@@ -186,7 +193,12 @@ final class MailEngine: @unchecked Sendable {
 
     func call<Value: Decodable & Sendable>(_ request: EngineRequest, as _: Value.Type) async throws -> Value {
         try Task.checkCancellation()
-        let payload = try JSONEncoder().encode(request)
+        let searchID: UInt64? = request.operation == "search" ? lock.withLock {
+            searchCount += 1; return searchCount
+        } : nil
+        var message = request
+        message.searchID = searchID
+        let payload = try JSONEncoder().encode(message)
         let cancellation = InvocationCancellation()
         if request.operation == "sync" {
             jj_engine_begin_sync(handle)
@@ -221,6 +233,10 @@ final class MailEngine: @unchecked Sendable {
             cancellation.cancel()
             if request.operation == "sync" {
                 cancel()
+            }
+            // 正在执行的检索立即停止扫描, 释放 CPU.
+            if let searchID {
+                jj_engine_cancel_search(handle, searchID)
             }
         }
     }

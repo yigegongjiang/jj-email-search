@@ -81,6 +81,7 @@ pub fn dispatch(engine: &mut Engine, v: &Value) -> Result<Value> {
                 &folders,
                 v.get("query").and_then(Value::as_str).unwrap_or(""),
                 v.get("field").and_then(Value::as_str).unwrap_or("all"),
+                v.get("search_id").and_then(Value::as_u64),
             )
         }
         "highlight" => {
@@ -164,6 +165,18 @@ pub unsafe extern "C" fn jj_engine_cancel(handle: *mut c_void) {
             .progress
             .cancelled
             .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+/// Cancels every search with id <= `search_id`; never waits on the engine mutex.
+/// # Safety
+/// `handle` must be live; close must not run concurrently.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn jj_engine_cancel_search(handle: *mut c_void, search_id: u64) {
+    if !handle.is_null() {
+        unsafe { &*(handle as *const Handle) }
+            .progress
+            .search_cancelled
+            .fetch_max(search_id, std::sync::atomic::Ordering::Relaxed);
     }
 }
 /// # Safety

@@ -8,7 +8,7 @@ pub struct MixedStream {
     tokens: Vec<Token>,
     cursor: usize,
 }
-fn chinese(c: char) -> bool {
+pub fn chinese(c: char) -> bool {
     matches!(c as u32,0x3400..=0x9fff|0xf900..=0xfaff|0x20000..=0x323af)
 }
 impl Tokenizer for MixedTokenizer {
