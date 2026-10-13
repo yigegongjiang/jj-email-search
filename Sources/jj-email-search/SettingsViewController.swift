@@ -52,6 +52,8 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         progress.style = .bar; progress.isIndeterminate = false
         progress.minValue = 0; progress.maxValue = 1
         progress.setAccessibilityIdentifier("sync-progress")
+        // 仅同步期间显示; 空闲时的空进度条易被误读为卡住的任务.
+        progress.isHidden = true
         let stack = NSStackView(views: [source, hint, scroll, progress, status])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -161,7 +163,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         syncButton?.isEnabled = false; rootButton?.isEnabled = false; refreshButton?.isEnabled = false
         cancelButton?.isEnabled = true
         status.stringValue = "正在关闭 Thunderbird…"
-        progress.doubleValue = 0
+        showProgress(true)
         let ids = selected.sorted()
         let root = ConfigStore.config.thunderbirdRoot
         syncTask = Task { [weak self] in
@@ -170,12 +172,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .milliseconds(250))
                     guard !Task.isCancelled, let self else { return }
-                    if let value = engine.progress(), value.total > 0 {
-                        progress.doubleValue = Double(value.current) / Double(value.total)
-                        let bytes = ByteCountFormatter.string(fromByteCount: Int64(value.bytes), countStyle: .file)
-                        status.stringValue = "处理 \(value.current) / \(value.total)"
-                            + " · 新增／更新 \(value.imported) · 已读取 \(bytes)"
-                    }
+                    showEngineProgress()
                 }
             }
             do {
@@ -192,16 +189,37 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
                 let elapsed = String(format: "%.1f", result.elapsedMs / 1000)
                 status.stringValue = "同步完成 · \(total) 封本地邮件 · 新增／更新 \(updated)"
                     + " · \(missing) 封正文未下载 · \(elapsed) s"
-                progress.doubleValue = 1
             } catch is CancellationError {
                 status.stringValue = "同步已取消；已提交邮件保留，下次同步继续"
             } catch { status.stringValue = error.localizedDescription }
             progressTask?.cancel(); progressTask = nil
+            showProgress(false)
             syncing = false
             table.isEnabled = true
             syncButton?.isEnabled = true; rootButton?.isEnabled = true; refreshButton?.isEnabled = true
             cancelButton?.isEnabled = false
             syncFinished?()
+        }
+    }
+
+    private func showEngineProgress() {
+        guard let value = engine.progress(), value.total > 0 else { return }
+        if progress.isIndeterminate {
+            progress.stopAnimation(nil); progress.isIndeterminate = false
+        }
+        progress.doubleValue = Double(value.current) / Double(value.total)
+        let bytes = ByteCountFormatter.string(fromByteCount: Int64(value.bytes), countStyle: .file)
+        status.stringValue = "处理 \(value.current) / \(value.total)"
+            + " · 新增／更新 \(value.imported) · 已读取 \(bytes)"
+    }
+
+    /// 关闭 Thunderbird / 快照阶段引擎尚无总数: 先显示不确定进度, 首个总数到达后切换.
+    private func showProgress(_ visible: Bool) {
+        progress.isIndeterminate = visible; progress.isHidden = !visible
+        if visible {
+            progress.startAnimation(nil)
+        } else {
+            progress.stopAnimation(nil)
         }
     }
 

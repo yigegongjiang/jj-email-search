@@ -7,6 +7,13 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Fixed
+
+- 同步设置页底部进度条只在同步时显示：开始时先显示等待动画，有了总数后再按进度前进；平时不再显示一条不动的空进度条。
+  - `SettingsViewController`: `sync-progress` 默认 `isHidden`; 同步开始 indeterminate + `startAnimation`, 首个 `total > 0` 切 determinate, 结束隐藏
+
 ## [0.2.2] - 2026-10-13
 
 ### Added

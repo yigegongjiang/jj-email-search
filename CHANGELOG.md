@@ -11,6 +11,12 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- 同步设置页底部进度条只在同步时显示：开始时先显示等待动画，有了总数后再按进度前进；平时不再显示一条不动的空进度条。
+
 ## [0.2.2] - 2026-10-13
 
 ### Added
