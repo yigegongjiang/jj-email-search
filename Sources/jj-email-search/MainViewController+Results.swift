@@ -1,6 +1,33 @@
 import AppKit
 
 extension MainViewController {
+    func installTitlebar(in window: NSWindow) {
+        let settings = NSButton(title: "同步设置", target: self, action: #selector(showSettings))
+        settings.setAccessibilityIdentifier("open-sync-settings")
+        let save = NSButton(title: "导出邮件", target: self, action: #selector(exportMessage))
+        save.setAccessibilityIdentifier("export-mail")
+        let attachment = NSButton(title: "保存附件", target: self, action: #selector(exportAttachment))
+        attachment.setAccessibilityIdentifier("save-attachment")
+        exportButton = save; attachmentButton = attachment
+        titlebarControls(window, [save, attachment, settings])
+        updateActions()
+    }
+
+    @objc
+    func showSettings() {
+        openSettings?()
+    }
+
+    @objc
+    func previewChanged() {
+        updatePreviewBody()
+    }
+
+    @objc
+    func attachmentChanged() {
+        updateActions()
+    }
+
     func focusSearch() {
         view.window?.makeFirstResponder(search)
         search.selectText(nil)
@@ -53,13 +80,13 @@ extension MainViewController {
         previewTask?.cancel(); previewSequence += 1
         previewID = item?.id; preview = nil
         attachments.removeAllItems(); attachments.addItem(withTitle: "无附件"); attachments.isEnabled = false
+        headerScroll?.isHidden = item == nil
+        updateActions()
         guard let item else {
-            header.string = ""; body.string = "选择邮件以预览正文。"; return
+            header.string = ""; body.string = placeholder; return
         }
         let version = previewSequence
-        let date = dateFormatter.string(from: Date(timeIntervalSince1970: item.date))
-        header.string = [item.subject, "发件人：\(item.sender)", "收件人：\(item.recipients)",
-                         "\(date) · \(item.account) · \(item.folderName)"].joined(separator: "\n")
+        header.textStorage?.setAttributedString(headerText(item))
         body.string = engine.isSyncing ? "同步进行中，预览将在同步结束后读取…" : "正在读取邮件…"
         previewTask = Task { [weak self] in
             guard let self else { return }
@@ -71,15 +98,14 @@ extension MainViewController {
                 guard !Task.isCancelled, previewSequence == version else { return }
                 preview = value
                 attachments.removeAllItems()
-                for attachment in value.attachments {
+                for (position, attachment) in value.attachments.enumerated() {
                     let attachmentSize = ByteCountFormatter.string(
                         fromByteCount: Int64(attachment.size), countStyle: .file
                     )
                     let availability = attachment.available ? "" : "（不可用）"
-                    attachments
-                        .addItem(
-                            withTitle: "\(attachment.name) · \(attachmentSize)\(availability)"
-                        )
+                    // 序号 / 总数: 弹出框收起时也能看出共几个附件.
+                    attachments.addItem(withTitle: "附件 \(position + 1)/\(value.attachments.count) · "
+                        + "\(attachment.name) · \(attachmentSize)\(availability)")
                     attachments.lastItem?.representedObject = attachment.index
                 }
                 attachments.isEnabled = !value.attachments.isEmpty
@@ -87,12 +113,44 @@ extension MainViewController {
                     attachments.addItem(withTitle: "无附件")
                 }
                 updatePreviewBody()
+                updateActions()
             } catch {
                 if previewSequence == version {
                     body.string = error.localizedDescription
                 }
             }
         }
+    }
+
+    /// 无选中邮件时的预览区提示; 空库时引导同步.
+    var placeholder: String {
+        libraryCount <= 0
+            ? "还没有可检索的邮件。\n\n1. 点击右上角「同步设置」\n2. 选中 Thunderbird 文件夹（⌘ 点击可多选）\n3. 点击「同步所选」"
+            : "选择邮件以预览正文。所有内容均来自本地，不加载远程资源。"
+    }
+
+    /// 导出 / 保存附件仅在可执行时启用; 与 `export` / `exportAttachment` 守卫一致.
+    func updateActions() {
+        let hasMail = table.selectedRow >= 0 && table.selectedRow < items.count
+        exportButton?.isEnabled = hasMail
+        let index = attachments.selectedItem?.representedObject as? Int
+        attachmentButton?.isEnabled = hasMail && preview?.attachments
+            .first(where: { $0.index == index })?.available == true
+    }
+
+    private func headerText(_ item: MailItem) -> NSAttributedString {
+        let date = dateFormatter.string(from: Date(timeIntervalSince1970: item.date))
+        let text = NSMutableAttributedString(string: item.subject.isEmpty ? "（无主题）" : item.subject, attributes: [
+            .font: NSFont.boldSystemFont(ofSize: 13), .foregroundColor: NSColor.labelColor
+        ])
+        let detail: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        for line in ["发件人：\(item.sender)", "收件人：\(item.recipients)",
+                     "\(date) · \(item.account) · \(item.folderName)"] {
+            text.append(NSAttributedString(string: "\n" + line, attributes: detail))
+        }
+        return text
     }
 
     func updatePreviewBody() {

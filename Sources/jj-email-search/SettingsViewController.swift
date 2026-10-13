@@ -35,7 +35,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 850, height: 620))
         selected = Set(ConfigStore.state.selectedSourceFolders)
-        source.stringValue = "只读来源：\(ConfigStore.config.thunderbirdRoot)"
+        source.stringValue = "Thunderbird 目录（只读）：\(ConfigStore.config.thunderbirdRoot)"
         source.font = .systemFont(ofSize: 11)
         table.dataSource = self; table.delegate = self
         table.rowHeight = 25
@@ -50,7 +50,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         let scroll = NSScrollView()
         scroll.documentView = table; scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
-        let hint = label("手动同步：关闭 Thunderbird → 只读快照 → 增量导入。按 Command 多选账户／文件夹；「删除已同步」只删除本 App 数据。")
+        let hint = label("选中要同步的文件夹（⌘ 点击可多选），再点右上角「同步所选」；同步前会先退出 Thunderbird，只读取不修改。")
         hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor
         status.font = .systemFont(ofSize: 11)
         progress.style = .bar; progress.isIndeterminate = false
@@ -83,12 +83,22 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         refresh.setAccessibilityIdentifier("refresh-source-folders")
         let sync = NSButton(title: "同步所选", target: self, action: #selector(syncSelected))
         sync.setAccessibilityIdentifier("sync-selected-folders")
+        // 主操作强调色; 不设 ↩ 默认键, 误触会退出 Thunderbird.
+        sync.bezelColor = .controlAccentColor
         let remove = NSButton(title: "删除已同步", target: self, action: #selector(removeSelected))
         remove.setAccessibilityIdentifier("remove-synced-folders")
         let cancel = NSButton(title: "取消", target: self, action: #selector(cancelSync))
         cancel.setAccessibilityIdentifier("cancel-sync"); cancel.isEnabled = false
         rootButton = root; refreshButton = refresh; syncButton = sync; removeButton = remove; cancelButton = cancel
         titlebarControls(window, [root, refresh, remove, cancel, sync])
+        updateActions()
+    }
+
+    /// 同步 / 删除仅在所选文件夹可执行时启用; 与 `syncSelected` / `removeSelected` 守卫一致.
+    func updateActions() {
+        syncButton?.isEnabled = !syncing && !selected.subtracting(missing).isEmpty
+        removeButton?.isEnabled = !syncing && selected.contains { synced[$0] != nil }
+        for button in [rootButton, refreshButton] { button?.isEnabled = !syncing }
     }
 
     @objc
@@ -124,8 +134,9 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
                 table.selectRowIndexes(IndexSet(list.indices.filter { selected.contains(list[$0].id) }),
                                        byExtendingSelection: false)
                 restoringSelection = false
+                updateActions()
                 status.stringValue = message ?? summary()
-                source.stringValue = "只读来源：\(root)"
+                source.stringValue = "Thunderbird 目录（只读）：\(root)"
             } catch { status.stringValue = error.localizedDescription }
         }
     }
@@ -179,6 +190,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
             index < folders.count ? folders[index].id : nil
         })
         ConfigStore.update { $0.selectedSourceFolders = selected.sorted() }
+        updateActions()
         status.stringValue = summary()
     }
 
@@ -230,7 +242,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
     func setBusy(_ busy: Bool) {
         syncing = busy
         table.isEnabled = !busy
-        for button in [syncButton, rootButton, refreshButton, removeButton] { button?.isEnabled = !busy }
+        updateActions()
         cancelButton?.isEnabled = false
         showProgress(busy)
     }

@@ -10,13 +10,16 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     let table = AccessibleTable()
     let status = label("正在打开邮件库…", identifier: "search-status")
     let header = NSTextView()
+    var headerScroll: NSScrollView?
     let body = NSTextView()
     let previewMode = AccessiblePopUp()
     let attachments = AccessiblePopUp()
     var items: [MailItem] = []
     var preview: MailPreview?
     var previewID: String?
-    private var libraryCount = 0
+    var exportButton: NSButton?
+    var attachmentButton: NSButton?
+    var libraryCount = 0
     private var queryTask: Task<Void, Never>?
     var previewTask: Task<Void, Never>?
     private var sequence = 0
@@ -81,6 +84,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
     private func configureSearchControls() {
         search.placeholderString = "搜索主题、发件人或正文；支持 AND / OR / NOT 和 \"短语\""
+        search.toolTip = """
+        多个词默认同时匹配；AND / OR / NOT 组合，"双引号" 精确短语。
+        限定字段：subject:主题  sender:发件人  recipients:收件人  body:正文
+        清空搜索框显示全部邮件；↓ / ↩ 进入结果列表。
+        """
         search.setAccessibilityIdentifier("mail-search")
         search.delegate = self
         search.sendsSearchStringImmediately = true
@@ -118,12 +126,18 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func makePreviewPane() -> NSView {
-        previewMode.addItems(withTitles: ["当前邮件正文", "完整邮件正文"])
+        // representedObject = 稳定 AX 标识, 标题可改.
+        previewMode.addItems(withTitles: ["本封正文", "含引用全文"])
+        previewMode.item(at: 0)?.representedObject = "own"
+        previewMode.item(at: 1)?.representedObject = "full"
+        previewMode.toolTip = "本封正文：隐藏回复中引用的历史邮件；含引用全文：显示完整正文"
         previewMode.target = self; previewMode.action = #selector(previewChanged)
         previewMode.setAccessibilityIdentifier("preview-mode")
         attachments.addItem(withTitle: "无附件")
         attachments.setAccessibilityIdentifier("mail-attachments")
         attachments.isEnabled = false
+        attachments.target = self; attachments.action = #selector(attachmentChanged)
+        attachments.toolTip = "选择附件后点击右上角「保存附件」"
         let controls = NSStackView(views: [previewMode, attachments])
         controls.spacing = 6
         for text in [header, body] {
@@ -136,15 +150,19 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             text.isHorizontallyResizable = false
         }
         header.font = .systemFont(ofSize: 12)
+        header.isRichText = true
         header.setAccessibilityIdentifier("mail-header")
         body
             .font = .systemFont(ofSize: (10...18).contains(ConfigStore.config.fontSize) ? ConfigStore.config
                 .fontSize : 12)
         body.setAccessibilityIdentifier("mail-body")
-        body.string = "选择邮件以预览正文。所有内容均来自本地，不加载远程资源。"
+        body.string = placeholder
         let headerScroll = NSScrollView()
         headerScroll.documentView = header; headerScroll.hasVerticalScroller = true
         headerScroll.heightAnchor.constraint(equalToConstant: 80).isActive = true
+        // 未选中邮件时隐藏, 避免空白头部框.
+        headerScroll.isHidden = true
+        self.headerScroll = headerScroll
         let bodyScroll = NSScrollView()
         bodyScroll.documentView = body; bodyScroll.hasVerticalScroller = true
         let pane = NSStackView(views: [controls, headerScroll, bodyScroll])
@@ -155,29 +173,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         return pane
     }
 
-    func installTitlebar(in window: NSWindow) {
-        let settings = NSButton(title: "同步设置", target: self, action: #selector(showSettings))
-        settings.setAccessibilityIdentifier("open-sync-settings")
-        let save = NSButton(title: "导出邮件", target: self, action: #selector(exportMessage))
-        save.setAccessibilityIdentifier("export-mail")
-        let attachment = NSButton(title: "保存附件", target: self, action: #selector(exportAttachment))
-        attachment.setAccessibilityIdentifier("save-attachment")
-        titlebarControls(window, [save, attachment, settings])
-    }
-
-    @objc
-    private func showSettings() {
-        openSettings?()
-    }
-
     @objc
     private func scopeChanged() {
         scheduleSearch(immediate: true)
-    }
-
-    @objc
-    private func previewChanged() {
-        updatePreviewBody()
     }
 
     func refreshLibrary() async {
@@ -246,12 +244,14 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 let elapsed = start.duration(to: .now)
                 let elapsedMilliseconds = Double(elapsed.components.seconds) * 1000 +
                     Double(elapsed.components.attoseconds) / 1e15
-                let totalTime = String(format: "%.1f", elapsedMilliseconds)
-                let engineTime = String(format: "%.1f", result.elapsedMs)
+                let scope = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "共" : "找到"
                 status.stringValue = libraryCount <= 0
-                    ? "尚未同步邮件；打开右上角“同步设置”选择源文件夹。"
-                    : "\(result.count) 封匹配 · 全量返回 \(totalTime) ms · 引擎 \(engineTime) ms"
+                    ? "尚未同步邮件；点击右上角「同步设置」开始。"
+                    : "\(scope) \(result.count) 封 · \(Int(elapsedMilliseconds.rounded())) ms"
                     + (result.relaxed ? " · 查询语法不完整，已按关键词检索" : "")
+                if previewID == nil {
+                    body.string = placeholder
+                }
                 status.setAccessibilityValue(status.stringValue)
             } catch {
                 guard sequence == version else { return }

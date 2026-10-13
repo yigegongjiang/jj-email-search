@@ -7,6 +7,17 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Changed
+
+- 界面更易上手：导出 / 保存附件 / 同步 / 删除按钮只在可用时亮起，「同步所选」突出显示；设置页提示改为分步说明。
+  - `MainViewController.updateActions` / `SettingsViewController.updateActions`: 启用状态与动作守卫同一谓词; `sync-selected-folders` `bezelColor = .controlAccentColor`, 不设 ↩ 默认键
+- 预览更清晰：主题加粗、附件显示「第几个 / 共几个」，正文切换改名为「本封正文 / 含引用全文」；未同步邮件时预览区给出同步步骤。
+  - `preview-mode` 项 `representedObject` = `own` / `full` (AX 稳定标识); 未选中邮件时隐藏 `mail-header`; `placeholder` 按 `libraryCount` 切换
+- 状态栏精简为「共 / 找到 N 封」；搜索框悬停显示完整检索语法。
+  - 去掉引擎耗时, 保留总耗时 + 语法降级提示; `titlebar` / `@objc` 处理移至 `MainViewController+Results.swift` (type_body_length)
+
 ## [0.2.4] - 2026-10-13
 
 ### Added
