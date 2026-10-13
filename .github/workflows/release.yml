@@ -30,12 +30,18 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/master || { echo "$GITHUB_REF_NAME is not on master"; exit 1; }
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        with:
+          toolchain: 1.99.0
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
       # Universal (arm64 + x86_64), ad-hoc 签名: 无需 Apple 开发者账号。
       - name: Build
         run: |
           xcodebuild -project jj-email-search.xcodeproj -scheme jj-email-search \
             -configuration Release -derivedDataPath build -destination 'generic/platform=macOS' \
-            ONLY_ACTIVE_ARCH=NO build
+            DEVELOPMENT_TEAM=ZG3FDF8RBQ ONLY_ACTIVE_ARCH=NO build
 
       - name: Verify
         run: |

@@ -4,12 +4,18 @@ import Foundation
 /// 新增键: 加属性 (带默认值) + `ConfigStore.configNotes` 说明.
 struct AppConfig: Codable, Equatable {
     /// 主界面文字字号 (pt).
-    var fontSize = 26.0
+    var fontSize = 12.0
+    /// Thunderbird profiles.ini 所在目录。
+    var thunderbirdRoot = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Thunderbird")
+        .path
 }
 
 /// 界面状态: state.json, App 写入.
 struct AppState: Codable, Equatable {
     var window: WindowFrame?
+    var selectedSourceFolders: [String] = []
+    var searchFolder: String = ""
+    var searchQuery: String = ""
 }
 
 struct WindowFrame: Codable, Equatable {
@@ -101,7 +107,8 @@ enum ConfigStore {
     }
 
     private static let configNotes: [String: String] = [
-        "fontSize": "主界面文字字号 (pt), 8–64; 其他值取 26."
+        "fontSize": "界面字号 (pt), 10–18; 其他值取 12.",
+        "thunderbirdRoot": "Thunderbird profiles.ini 所在目录; 仅读取本地邮件."
     ]
 }
 

@@ -1,2 +1,4 @@
 --swiftversion 6.0
 --commas inline
+
+--maxwidth 120

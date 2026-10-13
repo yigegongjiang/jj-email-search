@@ -7,6 +7,18 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Added
+
+- 实现 Thunderbird 本地只读手动同步，支持多账户 / 多文件夹和增量更新。
+  - Mork 成员解析、mbox 边界流读取 / maildir、快照校验、稳定来源键和幂等提交；进度与数据原子持久化。
+  - 缓存清理保留、取消 / 异常恢复、版本化索引与源目录导出保护。
+- 实现中英全文检索，完整返回全部命中邮件，支持字段选择与短语 / 布尔查询。
+  - Rust Tantivy + C ABI；原文 STORED、列表 fast fields；有界元数据缓存；中文 Jieba + 英文内置分词。
+- 提供独立正文 / 完整正文预览、附件保存与邮件导出；所有处理在本地执行。
+  - AppKit 原生 AX 后台操作；Universal Rust / Swift Release 构建与锁定依赖。
+
 ## [0.1.1] - 2026-10-13
 
 ### Added

@@ -3,6 +3,9 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
+    private var settingsWindow: NSWindow?
+    private var engine: MailEngine?
+    private var mainController: MainViewController?
     private var frameObservers: [NSObjectProtocol] = []
     private var pendingFrameSave: Task<Void, Never>?
 
@@ -18,8 +21,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         window.title = appName
         window.subtitle = ConfigStore.warnings
-        window.contentMinSize = NSSize(width: 480, height: 320)
-        window.contentViewController = MainViewController()
+        window.contentMinSize = NSSize(width: 920, height: 500)
+        do {
+            let engine = try MailEngine(directory: ConfigStore.directory.appendingPathComponent(
+                "mail-index",
+                isDirectory: true
+            ))
+            self.engine = engine
+            let controller = MainViewController(engine: engine)
+            controller.openSettings = { [weak self] in self?.showSettings() }
+            window.contentViewController = controller
+            controller.installTitlebar(in: window)
+            mainController = controller
+        } catch {
+            window.contentView = NSTextField(labelWithString: error.localizedDescription)
+        }
         window.isReleasedWhenClosed = false
         restoreFrame(window)
         self.window = window
@@ -30,6 +46,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             window.orderBack(nil)
         }
+    }
+
+    @objc
+    private func showSettings() {
+        guard let engine else { return }
+        if settingsWindow == nil {
+            let controller = SettingsViewController(engine: engine)
+            controller.syncFinished = { [weak self] in
+                guard let self else { return }
+                Task { await mainController?.refreshLibrary() }
+            }
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 850, height: 620),
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Thunderbird 同步设置"
+            window.contentMinSize = NSSize(width: 650, height: 420)
+            window.contentViewController = controller
+            window.isReleasedWhenClosed = false
+            controller.installTitlebar(in: window)
+            window.center()
+            settingsWindow = window
+        }
+        if ProcessInfo.processInfo.environment["APP_BACKGROUND"] == "1", !NSApp.isActive {
+            settingsWindow?.orderBack(nil)
+        } else {
+            settingsWindow?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        engine?.cancel()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
@@ -76,6 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 无 nib 时系统不生成菜单栏; 最小菜单保证 ⌘Q / ⌘W / ⌘M 可用.
     private func makeMainMenu() -> NSMenu {
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "同步设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
+        appMenu.addItem(NSMenuItem.separator())
         let quit = #selector(NSApplication.terminate(_:))
         appMenu.addItem(withTitle: "Quit \(appName)", action: quit, keyEquivalent: "q")
 

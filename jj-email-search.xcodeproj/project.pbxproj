@@ -11,6 +11,10 @@
 		A00000000000000000000004 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* MainViewController.swift */; };
 		A00000000000000000000005 /* ConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* ConfigStore.swift */; };
 		A00000000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000015 /* Assets.xcassets */; };
+		B00000000000000000000001 /* MailEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011; };
+		B00000000000000000000002 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012; };
+		B00000000000000000000003 /* AccessibilityControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013; };
+		C00000000000000000000001 /* Third-party notices */ = {isa = PBXBuildFile; fileRef = C00000000000000000000011; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,6 +25,10 @@
 		A00000000000000000000016 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		A00000000000000000000017 /* ConfigStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStore.swift; sourceTree = "<group>"; };
 		A00000000000000000000013 /* jj-email-search.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "jj-email-search.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000011 /* MailEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailEngine.swift; sourceTree = "<group>"; };
+		B00000000000000000000012 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
+		B00000000000000000000013 /* AccessibilityControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityControls.swift; sourceTree = "<group>"; };
+		C00000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = text; path = THIRD_PARTY_NOTICES.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -30,12 +38,12 @@
 /* Begin PBXGroup section */
 		A00000000000000000000031 = {
 			isa = PBXGroup;
-			children = (A00000000000000000000014 /* version.xcconfig */, A00000000000000000000032 /* jj-email-search */, A00000000000000000000033 /* Products */);
+			children = (C00000000000000000000011, A00000000000000000000014 /* version.xcconfig */, A00000000000000000000032 /* jj-email-search */, A00000000000000000000033 /* Products */);
 			sourceTree = "<group>";
 		};
 		A00000000000000000000032 /* jj-email-search */ = {
 			isa = PBXGroup;
-			children = (A00000000000000000000011 /* main.swift */, A00000000000000000000012 /* AppDelegate.swift */, A00000000000000000000016 /* MainViewController.swift */, A00000000000000000000017 /* ConfigStore.swift */, A00000000000000000000015 /* Assets.xcassets */);
+			children = (A00000000000000000000011 /* main.swift */, A00000000000000000000012 /* AppDelegate.swift */, A00000000000000000000016 /* MainViewController.swift */, A00000000000000000000017 /* ConfigStore.swift */, B00000000000000000000013 /* AccessibilityControls.swift */, B00000000000000000000012 /* SettingsViewController.swift */, B00000000000000000000011 /* MailEngine.swift */, A00000000000000000000015 /* Assets.xcassets */);
 			path = "Sources/jj-email-search";
 			sourceTree = "<group>";
 		};
@@ -51,7 +59,7 @@
 		A00000000000000000000041 /* jj-email-search */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A00000000000000000000062;
-			buildPhases = (A00000000000000000000051, A00000000000000000000021, A00000000000000000000052);
+			buildPhases = (B00000000000000000000021, A00000000000000000000051, A00000000000000000000021, A00000000000000000000052);
 			buildRules = ();
 			dependencies = ();
 			name = "jj-email-search";
@@ -79,14 +87,18 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		A00000000000000000000052 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000003 /* Assets.xcassets in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000052 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (C00000000000000000000001, A00000000000000000000003 /* Assets.xcassets in Resources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		B00000000000000000000021 = {isa = PBXShellScriptBuildPhase; buildActionMask = 2147483647; files = (); inputPaths = (); outputPaths = ("$(SRCROOT)/Engine/target/universal/libjj_email_engine.a"); alwaysOutOfDate = 1; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/bash; shellScript = "\"$SRCROOT/scripts/build-engine.sh\""; };
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A00000000000000000000051 = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A00000000000000000000001 /* main.swift in Sources */, A00000000000000000000002 /* AppDelegate.swift in Sources */, A00000000000000000000004 /* MainViewController.swift in Sources */, A00000000000000000000005 /* ConfigStore.swift in Sources */);
+			files = (A00000000000000000000001 /* main.swift in Sources */, A00000000000000000000002 /* AppDelegate.swift in Sources */, A00000000000000000000004 /* MainViewController.swift in Sources */, B00000000000000000000001 /* MailEngine.swift in Sources */, B00000000000000000000002 /* SettingsViewController.swift in Sources */, B00000000000000000000003 /* AccessibilityControls.swift in Sources */, A00000000000000000000005 /* ConfigStore.swift in Sources */);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
@@ -115,6 +127,10 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/jj-email-search/BridgingHeader.h";
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/Engine/target/universal";
+				OTHER_LDFLAGS = "$(inherited) -ljj_email_engine -liconv";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(PRODUCT_NAME)";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";

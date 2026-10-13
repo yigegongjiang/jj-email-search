@@ -4,3 +4,6 @@ xcuserdata/
 /worktree/
 /CLAUDE.local.md
 /AGENTS.override.md
+
+/Engine/target/
+/qa/

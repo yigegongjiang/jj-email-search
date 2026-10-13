@@ -32,10 +32,25 @@ macOS 邮件检索应用：只读接入 Thunderbird 已下载邮件，提供本�
 
 ## 架构
 
-- Swift 6 + AppKit, 仅 macOS; NEVER 使用 SwiftUI; 纯代码 UI；无 storyboard / xib
-- 持久化: 本地 JSON 文件; 缺失键 / null 取默认; 解析失败停写该文件 + 窗口副标题提示
-  - `~/.config/config.jsonc`: 用户选项 + 逐键说明; 手工编辑 (JSON5) 重启生效
-  - `~/.config/config.default.jsonc`: 全部键默认值 + 说明, 启动刷新, 仅供查阅
-  - `~/.config/state.json`: 界面状态 (含窗口位置)
+- Swift 6 + AppKit + Rust Tantivy；macOS 14+；纯代码 UI，无 SwiftUI / storyboard / xib。
+- 邮件接入 / 索引 / 检索 / 持久化约束 → [技术方案](plan/tech.md)。
+- 配置 / 界面状态: 本地 JSON 文件; 缺失键 / null 取默认; 解析失败停写该文件 + 窗口副标题提示
+  - `~/.config/jj-email-search/config.jsonc`: 用户选项 + 逐键说明; 手工编辑 (JSON5) 重启生效
+  - `~/.config/jj-email-search/config.default.jsonc`: 全部键默认值 + 说明, 启动刷新, 仅供查阅
+  - `~/.config/jj-email-search/state.json`: 界面状态 (含窗口位置)
 - 配置 / 窗口状态统一由 `ConfigStore` 管理；MUST NOT 用 `UserDefaults` / `setFrameAutosaveName`
 - AX 后台可操作: `NSPopUpButton` -> 覆写 cell `isAccessibilitySelectorAllowed` + `setAccessibilityValue` (set value 切换, 无需弹菜单); 仅悬停显示的控件常驻 AX 树; 自绘视图 (单张位图 / 无子视图) -> 虚拟 `NSAccessibilityElement` 子节点
+
+## 使用
+
+- 同步设置：选择本地 Thunderbird 目录，Command 多选文件夹，点击「同步所选」；先退出 Thunderbird，再创建只读快照。
+- 主窗口：选择已同步文件夹 / 字段，输入关键词；支持 AND / OR / NOT 组合、双引号短语；空查询显示全部邮件。
+- 列表完整返回所有命中，按日期倒序；预览可切换独立正文 / 完整正文；原文与可用附件支持导出，禁止写入源目录。
+- 不完整内容以 ⚠ 标记；正文未下载的邮件不从服务器补取，先由 Thunderbird 下载后再同步。
+- 数据目录：`~/.config/jj-email-search/mail-index/`；含原文与索引，备份需覆盖完整目录。
+
+## 诊断
+
+- Rust CLI：`Engine/target/release/jj-email-engine discover` / `inspect <folder-name> <account>`；`serve <data-directory>` 接收逐行 JSON 请求，使用与 App 相同的引擎。
+- AX 标识：`open-sync-settings` / `source-folders` / `sync-selected-folders` / `cancel-sync` / `search-folder` / `search-field` / `mail-search` / `mail-results` / `preview-mode`。
+- 表格 AXValue 为从 0 开始的行号，逗号分隔多选；下拉框 AXValue 接受标题或字段 / 文件夹标识。

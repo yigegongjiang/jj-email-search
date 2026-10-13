@@ -1,0 +1,27 @@
+[package]
+name = "jj-email-engine"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[[bin]]
+name = "jj-email-engine"
+path = "src/main.rs"
+
+[dependencies]
+tantivy = { version = "=0.26.2" }
+tantivy-jieba = "=0.21.0"
+mail-parser = { version = "=0.11.9", features = ["full_encoding"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+blake3 = "1"
+anyhow = "1"
+tempfile = "3"
+scraper = "0.26"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

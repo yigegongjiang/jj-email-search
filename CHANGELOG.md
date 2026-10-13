@@ -11,6 +11,14 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- 实现 Thunderbird 本地只读手动同步，支持多账户 / 多文件夹和增量更新。
+- 实现中英全文检索，完整返回全部命中邮件，支持字段选择与短语 / 布尔查询。
+- 提供独立正文 / 完整正文预览、附件保存与邮件导出；所有处理在本地执行。
+
 ## [0.1.1] - 2026-10-13
 
 ### Added

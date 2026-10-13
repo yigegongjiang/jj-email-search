@@ -82,7 +82,7 @@ if [ "$branch" != "$main" ]; then
   main_dir="$(git worktree list --porcelain | awk -v ref="branch refs/heads/$main" \
     '/^worktree / { dir = substr($0, 10) } $0 == ref { print dir }')"
   [ -n "$main_dir" ] || fail "$main 未在任何 worktree 检出"
-  git -C "$main_dir" merge --ff-only "$branch"
+  env -u GIT_INDEX_FILE git -C "$main_dir" merge --ff-only "$branch"
 fi
 git tag -a "$tag" -m "$tag" "$main"
 if [ -n "$remote" ]; then
