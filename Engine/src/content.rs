@@ -168,9 +168,11 @@ fn is_image(part: &mail_parser::MessagePart<'_>) -> bool {
         .is_some_and(|t| t.c_type.eq_ignore_ascii_case("image"))
         || part.attachment_name().is_some_and(|n| {
             n.rsplit_once('.').is_some_and(|(_, e)| {
-                ["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif"]
-                    .iter()
-                    .any(|x| e.eq_ignore_ascii_case(x))
+                [
+                    "png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif",
+                ]
+                .iter()
+                .any(|x| e.eq_ignore_ascii_case(x))
             })
         })
 }
