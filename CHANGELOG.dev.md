@@ -7,6 +7,13 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Changed
+
+- 检索框占位文字改为完整的精简语法示例，移除解释文案。
+  - `configureSearchControls`：`e.g.` 覆盖布尔 / 分组 / 短语 / 字段 / 范围 / 集合 / 全量语法；移除说明 tooltip。
+
 ## [0.2.8] - 2026-10-13
 
 ### Added

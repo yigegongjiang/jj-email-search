@@ -87,12 +87,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func configureSearchControls() {
-        search.placeholderString = "搜索主题、发件人或正文；支持 AND / OR / NOT 和 \"短语\""
-        search.toolTip = """
-        多个词默认同时匹配；AND / OR / NOT 组合，"双引号" 精确短语。
-        限定字段：subject:主题  sender:发件人  recipients:收件人  body:正文
-        清空搜索框显示全部邮件；↓ / ↩ 进入结果列表。
-        """
+        search.placeholderString = #"e.g. a b · a AND b · a OR b · a NOT b · +a -b · (a OR b) AND c · "#
+            + #""a b" · "a b"~1 · "a b"* · a^2 · subject:a · sender:a · recipients:a · body:a · "#
+            + "subject:[a TO b] · subject:{a TO b} · subject:>=a · subject:<b · subject:IN [a b] · *"
         search.setAccessibilityIdentifier("mail-search")
         search.delegate = self
         search.sendsSearchStringImmediately = true

@@ -11,6 +11,12 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- 检索框占位文字改为完整的精简语法示例，移除解释文案。
+
 ## [0.2.8] - 2026-10-13
 
 ### Added
