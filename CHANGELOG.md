@@ -11,7 +11,7 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.2.10] - 2026-10-13
 
 ### Added
 
