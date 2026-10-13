@@ -3,21 +3,25 @@ import AppKit
 @MainActor
 final class SettingsViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     let engine: MailEngine
-    var syncFinished: (() -> Void)?
+    var libraryChanged: (() -> Void)?
     private let table = AccessibleTable()
     private let source = label("", identifier: "thunderbird-root")
-    private let status = label("读取 Thunderbird 文件夹…", identifier: "sync-status")
+    let status = label("读取 Thunderbird 文件夹…", identifier: "sync-status")
     private let progress = NSProgressIndicator()
     private var folders: [MailFolder] = []
-    private var selected: Set<String> = []
-    private var syncing = false
+    var selected: Set<String> = []
+    /// 已同步文件夹 (引擎 manifest); `missing` = 已同步但当前来源中不存在, 只能删除.
+    var synced: [String: FolderState] = [:]
+    var missing: Set<String> = []
+    var syncing = false
     private var restoringSelection = false
-    private var syncTask: Task<Void, Never>?
+    var syncTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var syncButton: NSButton?
     private var refreshButton: NSButton?
     private var rootButton: NSButton?
+    private var removeButton: NSButton?
     private var cancelButton: NSButton?
 
     init(engine: MailEngine) {
@@ -38,7 +42,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         table.allowsMultipleSelection = true
         table.usesAlternatingRowBackgroundColors = true
         table.setAccessibilityIdentifier("source-folders")
-        for (id, title, width) in [("account", "账户", 280.0), ("folder", "文件夹", 485.0)] {
+        for (id, title, width) in [("account", "账户", 250.0), ("folder", "文件夹", 400.0), ("synced", "已同步", 130.0)] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(id))
             column.title = title; column.width = width
             table.addTableColumn(column)
@@ -46,7 +50,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         let scroll = NSScrollView()
         scroll.documentView = table; scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
-        let hint = label("手动同步：关闭 Thunderbird → 只读快照 → 增量导入。按 Command 多选账户／文件夹。")
+        let hint = label("手动同步：关闭 Thunderbird → 只读快照 → 增量导入。按 Command 多选账户／文件夹；「删除已同步」只删除本 App 数据。")
         hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor
         status.font = .systemFont(ofSize: 11)
         progress.style = .bar; progress.isIndeterminate = false
@@ -79,37 +83,55 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         refresh.setAccessibilityIdentifier("refresh-source-folders")
         let sync = NSButton(title: "同步所选", target: self, action: #selector(syncSelected))
         sync.setAccessibilityIdentifier("sync-selected-folders")
+        let remove = NSButton(title: "删除已同步", target: self, action: #selector(removeSelected))
+        remove.setAccessibilityIdentifier("remove-synced-folders")
         let cancel = NSButton(title: "取消", target: self, action: #selector(cancelSync))
         cancel.setAccessibilityIdentifier("cancel-sync"); cancel.isEnabled = false
-        rootButton = root; refreshButton = refresh; syncButton = sync; cancelButton = cancel
-        titlebarControls(window, [root, refresh, cancel, sync])
+        rootButton = root; refreshButton = refresh; syncButton = sync; removeButton = remove; cancelButton = cancel
+        titlebarControls(window, [root, refresh, remove, cancel, sync])
     }
 
     @objc
     private func refresh() {
+        reload()
+    }
+
+    /// `message`: 同步 / 删除结果, 刷新后保留在状态栏.
+    func reload(message: String? = nil) {
         guard !syncing else { return }
         refreshTask?.cancel()
         let root = ConfigStore.config.thunderbirdRoot
-        status.stringValue = "正在读取本地账户／文件夹…"
+        status.stringValue = message ?? "正在读取本地账户／文件夹…"
         refreshTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let list = try await engine.call(
+                let discovered = try await engine.call(
                     EngineRequest(operation: "discover", root: root),
                     as: [MailFolder].self
                 )
+                let library = try await engine.call(EngineRequest(operation: "status"), as: LibraryState.self)
                 guard !Task.isCancelled else { return }
+                let known = Set(discovered.map(\.id))
+                let orphans = library.folders.map(\.folder).filter { !known.contains($0.id) }
+                    .sorted { ($0.account, $0.name) < ($1.account, $1.name) }
+                let list = discovered + orphans
                 folders = list
+                synced = Dictionary(library.folders.map { ($0.folder.id, $0) }) { first, _ in first }
+                missing = Set(orphans.map(\.id))
                 selected.formIntersection(Set(list.map(\.id)))
                 restoringSelection = true
                 table.reloadData()
                 table.selectRowIndexes(IndexSet(list.indices.filter { selected.contains(list[$0].id) }),
                                        byExtendingSelection: false)
                 restoringSelection = false
-                status.stringValue = "发现 \(list.count) 个本地文件夹 · 已选 \(selected.count) 个"
+                status.stringValue = message ?? summary()
                 source.stringValue = "只读来源：\(root)"
             } catch { status.stringValue = error.localizedDescription }
         }
+    }
+
+    private func summary() -> String {
+        "发现 \(folders.count - missing.count) 个本地文件夹 · 已同步 \(synced.count) 个 · 已选 \(selected.count) 个"
     }
 
     @objc
@@ -140,7 +162,13 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         let cell = table.makeView(withIdentifier: column.identifier, owner: nil) as? NSTextField ?? label("")
         cell.identifier = column.identifier
         cell.font = .systemFont(ofSize: 12)
-        cell.stringValue = column.identifier.rawValue == "account" ? folder.account : folder.name
+        switch column.identifier.rawValue {
+        case "account": cell.stringValue = folder.account
+        case "folder": cell.stringValue = folder.name
+        default:
+            let count = synced[folder.id].map { "\($0.count) 封" } ?? ""
+            cell.stringValue = missing.contains(folder.id) ? "\(count) · 来源已不存在" : count
+        }
         cell.toolTip = folder.store
         return cell
     }
@@ -151,20 +179,19 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
             index < folders.count ? folders[index].id : nil
         })
         ConfigStore.update { $0.selectedSourceFolders = selected.sorted() }
-        status.stringValue = "发现 \(folders.count) 个本地文件夹 · 已选 \(selected.count) 个"
+        status.stringValue = summary()
     }
 
     @objc
     private func syncSelected() {
         guard !syncing else { return }
-        guard !selected.isEmpty else { status.stringValue = "请选择待同步文件夹"; return }
-        syncing = true
-        table.isEnabled = false
-        syncButton?.isEnabled = false; rootButton?.isEnabled = false; refreshButton?.isEnabled = false
+        let ids = selected.subtracting(missing).sorted()
+        guard !ids.isEmpty else {
+            status.stringValue = selected.isEmpty ? "请选择待同步文件夹" : "所选文件夹来源已不存在，只能删除"; return
+        }
+        setBusy(true)
         cancelButton?.isEnabled = true
         status.stringValue = "正在关闭 Thunderbird…"
-        showProgress(true)
-        let ids = selected.sorted()
         let root = ConfigStore.config.thunderbirdRoot
         syncTask = Task { [weak self] in
             guard let self else { return }
@@ -193,13 +220,19 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
                 status.stringValue = "同步已取消；已提交邮件保留，下次同步继续"
             } catch { status.stringValue = error.localizedDescription }
             progressTask?.cancel(); progressTask = nil
-            showProgress(false)
-            syncing = false
-            table.isEnabled = true
-            syncButton?.isEnabled = true; rootButton?.isEnabled = true; refreshButton?.isEnabled = true
-            cancelButton?.isEnabled = false
-            syncFinished?()
+            setBusy(false)
+            reload(message: status.stringValue)
+            libraryChanged?()
         }
+    }
+
+    /// 同步 / 删除共用: 引擎串行写索引, 期间锁定选择与全部操作按钮.
+    func setBusy(_ busy: Bool) {
+        syncing = busy
+        table.isEnabled = !busy
+        for button in [syncButton, rootButton, refreshButton, removeButton] { button?.isEnabled = !busy }
+        cancelButton?.isEnabled = false
+        showProgress(busy)
     }
 
     private func showEngineProgress() {
@@ -229,8 +262,10 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         cancelButton?.isEnabled = false
         status.stringValue = "正在取消，已提交邮件会保留…"
     }
+}
 
-    private func closeThunderbird() async throws {
+private extension SettingsViewController {
+    func closeThunderbird() async throws {
         let processes = NSWorkspace.shared.runningApplications.filter {
             $0.bundleIdentifier == "org.mozilla.thunderbird" || $0.executableURL?.path
                 .contains("Thunderbird.app/Contents/MacOS/") == true

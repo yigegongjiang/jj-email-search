@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let engine else { return }
         if settingsWindow == nil {
             let controller = SettingsViewController(engine: engine)
-            controller.syncFinished = { [weak self] in
+            controller.libraryChanged = { [weak self] in
                 guard let self else { return }
                 Task { await mainController?.refreshLibrary() }
             }

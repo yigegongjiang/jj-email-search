@@ -69,6 +69,11 @@ pub fn dispatch(engine: &mut Engine, v: &Value) -> Result<Value> {
             );
             engine.sync(&selected)
         }
+        "remove" => {
+            let folders: Vec<String> =
+                serde_json::from_value(v.get("folders").cloned().context("Missing folders")?)?;
+            engine.remove(&folders)
+        }
         "search" => {
             let folders: Vec<String> =
                 serde_json::from_value(v.get("folders").cloned().unwrap_or(json!([])))?;

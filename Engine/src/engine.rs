@@ -427,10 +427,7 @@ impl Engine {
             "请先关闭 Thunderbird，再同步本地数据"
         );
         let start = Instant::now();
-        let mut writer: IndexWriter<TantivyDocument> = self
-            .index
-            .writer_with_num_threads(2, 96 * 1024 * 1024)
-            .context("索引正在由其他实例写入；稍后重试")?;
+        let mut writer = self.writer()?;
         let result = self.sync_inner(&mut writer, folders);
         if result.is_err() {
             let _ = writer.rollback();
@@ -443,6 +440,52 @@ impl Engine {
         self.reader.reload()?;
         let stats = result?;
         Ok(json!({"folders":stats,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0}))
+    }
+    fn writer(&self) -> Result<IndexWriter<TantivyDocument>> {
+        self.index
+            .writer_with_num_threads(2, 96 * 1024 * 1024)
+            .context("索引正在由其他实例写入；稍后重试")
+    }
+    /// Deletes App-side copies only (index + stored MIME); Thunderbird sources are never read.
+    /// Takes manifest ids directly: folders gone from Thunderbird stay removable.
+    pub fn remove(&mut self, folder_ids: &[String]) -> Result<Value> {
+        ensure!(!folder_ids.is_empty(), "请选择至少一个文件夹");
+        let start = Instant::now();
+        let mut writer = self.writer()?;
+        let result = (|| -> Result<usize> {
+            let mut manifest = self.manifest()?;
+            manifest.version = VERSION;
+            let mut removed = 0;
+            for id in folder_ids {
+                writer.delete_term(Term::from_field_text(self.fields.folder, id));
+                removed += usize::from(manifest.folders.remove(id).is_some());
+            }
+            // Not self.commit(): a cancelled sync leaves the cancel flag set until the next sync.
+            let mut c = writer.prepare_commit()?;
+            c.set_payload(&serde_json::to_string(&manifest)?);
+            c.commit()?;
+            // Default merge policy never compacts partly deleted segments; reclaim the stored MIME now.
+            let dirty: Vec<_> = self
+                .index
+                .searchable_segment_metas()?
+                .into_iter()
+                .filter(|m| m.has_deletes())
+                .map(|m| m.id())
+                .collect();
+            if !dirty.is_empty() {
+                writer.merge(&dirty).wait()?;
+            }
+            Ok(removed)
+        })();
+        if result.is_err() {
+            let _ = writer.rollback();
+        }
+        let merged = writer.wait_merging_threads();
+        if result.is_ok() {
+            merged?;
+        }
+        self.reader.reload()?;
+        Ok(json!({"removed":result?,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0}))
     }
     fn sync_inner(
         &mut self,

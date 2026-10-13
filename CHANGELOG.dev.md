@@ -7,6 +7,14 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Added
+
+- 同步设置页可删除已同步的文件夹：列表显示每个文件夹已同步的邮件数，「删除已同步」确认后只删除本 App 的数据并回收磁盘空间，Thunderbird 邮件不受影响。
+  - 引擎 `remove` 操作: 按 `folder` term 删除 + 移出 manifest + commit, 再合并含删除的 segment 回收存储的 MIME; 不经 `progress.check()`
+  - 设置页新增「已同步」列 + `remove-synced-folders`; 来源已不存在的已同步文件夹追加列出, 仅可删除; 删除后取消勾选
+
 ## [0.2.3] - 2026-10-13
 
 ### Fixed

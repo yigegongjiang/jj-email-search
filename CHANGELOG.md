@@ -11,6 +11,12 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- 同步设置页可删除已同步的文件夹：列表显示每个文件夹已同步的邮件数，「删除已同步」确认后只删除本 App 的数据并回收磁盘空间，Thunderbird 邮件不受影响。
+
 ## [0.2.3] - 2026-10-13
 
 ### Fixed
