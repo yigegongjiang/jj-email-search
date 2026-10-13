@@ -42,7 +42,7 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         table.allowsMultipleSelection = true
         table.usesAlternatingRowBackgroundColors = true
         table.setAccessibilityIdentifier("source-folders")
-        for (id, title, width) in [("account", "账户", 250.0), ("folder", "文件夹", 400.0), ("synced", "已同步", 130.0)] {
+        for (id, title, width) in [("account", "账户", 200.0), ("folder", "文件夹", 230.0), ("synced", "同步状态", 380.0)] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(id))
             column.title = title; column.width = width
             table.addTableColumn(column)
@@ -173,12 +173,11 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
         let cell = table.makeView(withIdentifier: column.identifier, owner: nil) as? NSTextField ?? label("")
         cell.identifier = column.identifier
         cell.font = .systemFont(ofSize: 12)
+        cell.textColor = .labelColor
         switch column.identifier.rawValue {
         case "account": cell.stringValue = folder.account
         case "folder": cell.stringValue = folder.name
-        default:
-            let count = synced[folder.id].map { "\($0.count) 封" } ?? ""
-            cell.stringValue = missing.contains(folder.id) ? "\(count) · 来源已不存在" : count
+        default: syncStatus(folder.id, into: cell)
         }
         cell.toolTip = folder.store
         return cell
@@ -277,6 +276,28 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
 }
 
 private extension SettingsViewController {
+    /// 每行都写状态: 空白格无法区分「未同步」与「未加载」.
+    func syncStatus(_ id: String, into cell: NSTextField) {
+        guard let state = synced[id] else {
+            cell.stringValue = "未同步"; cell.textColor = .secondaryLabelColor; return
+        }
+        var parts = ["\(state.count) 封"]
+        if state.unavailable > 0 {
+            parts.append("⚠ \(state.unavailable) 未下载")
+        }
+        // 旧 manifest 可能无同步时间 (0).
+        if state.syncedAt > 0 {
+            parts.append(Date(timeIntervalSince1970: state.syncedAt)
+                .formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute()))
+        }
+        if missing.contains(id) {
+            cell.stringValue = "⚠ 来源已不存在 · " + parts.joined(separator: " · ")
+            cell.textColor = .systemOrange
+        } else {
+            cell.stringValue = "✓ 已同步 · " + parts.joined(separator: " · ")
+        }
+    }
+
     func closeThunderbird() async throws {
         let processes = NSWorkspace.shared.runningApplications.filter {
             $0.bundleIdentifier == "org.mozilla.thunderbird" || $0.executableURL?.path

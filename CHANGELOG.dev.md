@@ -7,6 +7,13 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Changed
+
+- 同步设置的「同步状态」列逐个标出未同步 / ✓ 已同步，并显示封数、未下载数与上次同步时间。
+  - `SettingsViewController.syncStatus`: 读 manifest `FolderState` (`count` / `unavailable` / `synced_at`); 列宽 200 / 230 / 380
+
 ## [0.2.6] - 2026-10-13
 
 ### Changed
