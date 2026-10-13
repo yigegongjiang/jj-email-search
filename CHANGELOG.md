@@ -11,6 +11,12 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- 全新 App 图标：深色底 + 青绿渐变放大镜与信封，更简洁现代，小尺寸也清晰。
+
 ## [0.2.5] - 2026-10-13
 
 ### Changed

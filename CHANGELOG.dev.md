@@ -7,6 +7,13 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Changed
+
+- 全新 App 图标：深色底 + 青绿渐变放大镜与信封，更简洁现代，小尺寸也清晰。
+  - 源文件 `assets/AppIcon.svg`; `AppIcon.appiconset` 各尺寸由 `rsvg-convert -w <px>` 逐尺寸渲染
+
 ## [0.2.5] - 2026-10-13
 
 ### Changed
