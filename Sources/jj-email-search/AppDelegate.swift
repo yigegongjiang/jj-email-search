@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         ConfigStore.load()
+        // 单窗口 App 不使用标签页; 关闭后菜单不再注入标签页相关项.
+        NSWindow.allowsAutomaticWindowTabbing = false
         NSApp.mainMenu = makeMainMenu()
 
         let window = NSWindow(
@@ -129,38 +131,103 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "jj-email-search"
     }
 
-    /// 无 nib 时系统不生成菜单栏; 最小菜单保证 ⌘Q / ⌘W / ⌘M 与编辑快捷键可用.
+    /// 无 nib 时 AppKit 不生成菜单栏; 按 macOS 标准菜单结构手动构建.
+    /// 服务列表 / 窗口列表 / 帮助搜索框由系统按 servicesMenu / windowsMenu / helpMenu 注入.
     private func makeMainMenu() -> NSMenu {
-        let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "同步设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
-        appMenu.addItem(NSMenuItem.separator())
-        let quit = #selector(NSApplication.terminate(_:))
-        appMenu.addItem(withTitle: "Quit \(appName)", action: quit, keyEquivalent: "q")
-
-        // 文本框 / 预览的 ⌘C / ⌘V / ⌘A 依赖 Edit 菜单项分发 (nil target -> 响应链).
-        let editMenu = NSMenu(title: "Edit")
-        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
-        editMenu.addItem(NSMenuItem.separator())
-        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        editMenu.addItem(NSMenuItem.separator())
-        editMenu.addItem(withTitle: "搜索邮件", action: #selector(focusSearch), keyEquivalent: "f").target = self
-
-        let windowMenu = NSMenu(title: "Window")
-        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        let minimize = #selector(NSWindow.performMiniaturize(_:))
-        windowMenu.addItem(withTitle: "Minimize", action: minimize, keyEquivalent: "m")
-        NSApp.windowsMenu = windowMenu
-
         let mainMenu = NSMenu()
-        for submenu in [appMenu, editMenu, windowMenu] {
+        for submenu in [
+            makeAppMenu(),
+            makeFileMenu(),
+            makeEditMenu(),
+            makeViewMenu(),
+            makeWindowMenu(),
+            makeHelpMenu()
+        ] {
             let item = NSMenuItem()
             item.submenu = submenu
             mainMenu.addItem(item)
         }
         return mainMenu
+    }
+
+    private func makeAppMenu() -> NSMenu {
+        let menu = NSMenu(title: appName)
+        let about = #selector(NSApplication.orderFrontStandardAboutPanel(_:))
+        menu.addItem(withTitle: "关于 \(appName)", action: about, keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
+        menu.addItem(.separator())
+        let services = NSMenu(title: "服务")
+        menu.addItem(withTitle: "服务", action: nil, keyEquivalent: "").submenu = services
+        NSApp.servicesMenu = services
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "隐藏 \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = #selector(NSApplication.hideOtherApplications(_:))
+        menu.addItem(withTitle: "隐藏其他", action: hideOthers, keyEquivalent: "h").keyEquivalentModifierMask = [
+            .command,
+            .option
+        ]
+        let showAll = #selector(NSApplication.unhideAllApplications(_:))
+        menu.addItem(withTitle: "全部显示", action: showAll, keyEquivalent: "")
+        menu.addItem(.separator())
+        let quit = #selector(NSApplication.terminate(_:))
+        menu.addItem(withTitle: "退出 \(appName)", action: quit, keyEquivalent: "q")
+        return menu
+    }
+
+    private func makeFileMenu() -> NSMenu {
+        let menu = NSMenu(title: "文件")
+        menu.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        return menu
+    }
+
+    /// 文本框 / 预览的 ⌘C / ⌘V / ⌘A 依赖编辑菜单项分发 (nil target -> 响应链).
+    private func makeEditMenu() -> NSMenu {
+        let menu = NSMenu(title: "编辑")
+        menu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        menu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        menu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        menu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        menu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "搜索邮件", action: #selector(focusSearch), keyEquivalent: "f").target = self
+        return menu
+    }
+
+    private func makeViewMenu() -> NSMenu {
+        let menu = NSMenu(title: "显示")
+        let fullScreen = #selector(NSWindow.toggleFullScreen(_:))
+        menu.addItem(withTitle: "进入全屏幕", action: fullScreen, keyEquivalent: "f").keyEquivalentModifierMask = [
+            .command,
+            .control
+        ]
+        return menu
+    }
+
+    private func makeWindowMenu() -> NSMenu {
+        let menu = NSMenu(title: "窗口")
+        let minimize = #selector(NSWindow.performMiniaturize(_:))
+        menu.addItem(withTitle: "最小化", action: minimize, keyEquivalent: "m")
+        menu.addItem(withTitle: "缩放", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
+        let front = #selector(NSApplication.arrangeInFront(_:))
+        menu.addItem(withTitle: "前置全部窗口", action: front, keyEquivalent: "")
+        NSApp.windowsMenu = menu
+        return menu
+    }
+
+    private func makeHelpMenu() -> NSMenu {
+        let menu = NSMenu(title: "帮助")
+        menu.addItem(withTitle: "\(appName) 帮助", action: #selector(openHelp), keyEquivalent: "?").target = self
+        NSApp.helpMenu = menu
+        return menu
+    }
+
+    /// 无 Help Book; 帮助指向仓库 README.
+    @objc
+    private func openHelp() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/yigegongjiang/jj-email-search#readme")!)
     }
 }

@@ -7,6 +7,14 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Added
+
+- 补齐 macOS 标准菜单：关于、服务、隐藏 / 全部显示、全屏幕、窗口与帮助；菜单与系统菜单项统一为中文。
+  - `AppDelegate.makeMainMenu` 拆为 App / 文件 / 编辑 / 显示 / 窗口 / 帮助; 设置 `servicesMenu` / `windowsMenu` / `helpMenu`; 帮助打开 GitHub README
+  - `developmentRegion` = `zh-Hans` -> 系统注入项 (听写 / 表情与符号 / 服务) 显示中文; `allowsAutomaticWindowTabbing = false` 去除标签页菜单项
+
 ## [0.2.1] - 2026-10-13
 
 ### Added

@@ -11,6 +11,12 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- 补齐 macOS 标准菜单：关于、服务、隐藏 / 全部显示、全屏幕、窗口与帮助；菜单与系统菜单项统一为中文。
+
 ## [0.2.1] - 2026-10-13
 
 ### Added

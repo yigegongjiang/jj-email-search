@@ -77,9 +77,9 @@
 			attributes = {BuildIndependentTargetsInParallel = YES; LastSwiftUpdateCheck = 2720; LastUpgradeCheck = 2720; };
 			buildConfigurationList = A00000000000000000000061;
 			compatibilityVersion = "Xcode 14.0";
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
-			knownRegions = (en, Base);
+			knownRegions = ("zh-Hans", Base);
 			mainGroup = A00000000000000000000031;
 			productRefGroup = A00000000000000000000033 /* Products */;
 			projectDirPath = "";
