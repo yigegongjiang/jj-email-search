@@ -52,8 +52,10 @@ struct SearchResult: Decodable, Sendable {
     let items: [MailItem]
     let elapsedMs: Double
     let count: Int
+    /// 查询语法不完整时按纯关键词检索.
+    let relaxed: Bool
     enum CodingKeys: String, CodingKey {
-        case items, count
+        case items, count, relaxed
         case elapsedMs = "elapsed_ms"
     }
 }
@@ -148,6 +150,12 @@ struct EngineError: LocalizedError {
 final class MailEngine: @unchecked Sendable {
     private let handle: UnsafeMutableRawPointer
     private let queue = DispatchQueue(label: "com.yigegongjiang.jj-email-search.engine", qos: .userInitiated)
+    private let lock = NSLock()
+    private var activeSyncs = 0
+    /// 同步占用串行队列期间, 检索 / 预览排队至同步结束.
+    var isSyncing: Bool {
+        lock.withLock { activeSyncs > 0 }
+    }
 
     init(directory: URL) throws {
         guard let handle = directory.path.withCString({ jj_engine_open($0) }) else {
@@ -164,6 +172,12 @@ final class MailEngine: @unchecked Sendable {
         let cancellation = InvocationCancellation()
         if request.operation == "sync" {
             jj_engine_begin_sync(handle)
+            lock.withLock { activeSyncs += 1 }
+        }
+        defer {
+            if request.operation == "sync" {
+                lock.withLock { activeSyncs -= 1 }
+            }
         }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in

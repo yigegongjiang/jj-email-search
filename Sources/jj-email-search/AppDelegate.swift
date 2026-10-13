@@ -78,6 +78,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc
+    private func focusSearch() {
+        window?.makeKeyAndOrderFront(nil)
+        mainController?.focusSearch()
+    }
+
     func applicationWillTerminate(_: Notification) {
         engine?.cancel()
     }
@@ -123,13 +129,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "jj-email-search"
     }
 
-    /// 无 nib 时系统不生成菜单栏; 最小菜单保证 ⌘Q / ⌘W / ⌘M 可用.
+    /// 无 nib 时系统不生成菜单栏; 最小菜单保证 ⌘Q / ⌘W / ⌘M 与编辑快捷键可用.
     private func makeMainMenu() -> NSMenu {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "同步设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
         appMenu.addItem(NSMenuItem.separator())
         let quit = #selector(NSApplication.terminate(_:))
         appMenu.addItem(withTitle: "Quit \(appName)", action: quit, keyEquivalent: "q")
+
+        // 文本框 / 预览的 ⌘C / ⌘V / ⌘A 依赖 Edit 菜单项分发 (nil target -> 响应链).
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "搜索邮件", action: #selector(focusSearch), keyEquivalent: "f").target = self
 
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -138,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.windowsMenu = windowMenu
 
         let mainMenu = NSMenu()
-        for submenu in [appMenu, windowMenu] {
+        for submenu in [appMenu, editMenu, windowMenu] {
             let item = NSMenuItem()
             item.submenu = submenu
             mainMenu.addItem(item)

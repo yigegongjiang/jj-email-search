@@ -4,24 +4,25 @@ import AppKit
 final class MainViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     let engine: MailEngine
     var openSettings: (() -> Void)?
-    private let search = AccessibleSearchField()
+    let search = AccessibleSearchField()
     private let folders = AccessiblePopUp()
     private let fields = AccessiblePopUp()
-    private let table = AccessibleTable()
-    private let status = label("正在打开邮件库…", identifier: "search-status")
-    private let header = NSTextView()
-    private let body = NSTextView()
-    private let previewMode = AccessiblePopUp()
-    private let attachments = AccessiblePopUp()
-    private var items: [MailItem] = []
-    private var preview: MailPreview?
+    let table = AccessibleTable()
+    let status = label("正在打开邮件库…", identifier: "search-status")
+    let header = NSTextView()
+    let body = NSTextView()
+    let previewMode = AccessiblePopUp()
+    let attachments = AccessiblePopUp()
+    var items: [MailItem] = []
+    var preview: MailPreview?
+    var previewID: String?
+    private var libraryCount = 0
     private var queryTask: Task<Void, Never>?
-    private var previewTask: Task<Void, Never>?
+    var previewTask: Task<Void, Never>?
     private var sequence = 0
-    private var previewSequence = 0
-    private var loading = false
+    var previewSequence = 0
     private var loadedLibrary = false
-    private let dateFormatter: DateFormatter = {
+    let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return formatter
@@ -101,14 +102,18 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         table.dataSource = self; table.delegate = self
         table.rowHeight = 24
         table.usesAlternatingRowBackgroundColors = true
-        table.allowsMultipleSelection = true
+        table.allowsMultipleSelection = false
         table.setAccessibilityIdentifier("mail-results")
         for (identifier, title, width) in [("subject", "主题", 380.0), ("sender", "发件人", 210.0),
                                            ("date", "日期", 135.0), ("attachments", "附件", 45.0), ("size", "大小", 65.0)] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
             column.title = title; column.width = width; column.minWidth = 40
+            // 文本列默认升序, 数值 / 日期列默认降序.
+            column.sortDescriptorPrototype = NSSortDescriptor(key: identifier, ascending: identifier == "subject"
+                || identifier == "sender")
             table.addTableColumn(column)
         }
+        table.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
     }
 
@@ -139,7 +144,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         body.string = "选择邮件以预览正文。所有内容均来自本地，不加载远程资源。"
         let headerScroll = NSScrollView()
         headerScroll.documentView = header; headerScroll.hasVerticalScroller = true
-        headerScroll.heightAnchor.constraint(equalToConstant: 102).isActive = true
+        headerScroll.heightAnchor.constraint(equalToConstant: 80).isActive = true
         let bodyScroll = NSScrollView()
         bodyScroll.documentView = body; bodyScroll.hasVerticalScroller = true
         let pane = NSStackView(views: [controls, headerScroll, bodyScroll])
@@ -182,6 +187,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 ? (folders.selectedItem?.representedObject as? String ?? "")
                 : ConfigStore.state.searchFolder
             loadedLibrary = true
+            libraryCount = state.count
             folders.removeAllItems()
             folders.addItem(withTitle: "全部已同步文件夹（\(state.count)）")
             folders.item(at: 0)?.representedObject = ""
@@ -189,14 +195,13 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 $1.folder.account,
                 $1.folder.name
             ) }) {
-                folders.addItem(withTitle: "\(folder.folder.account) · \(folder.folder.name)（\(folder.count)）")
+                // 文件夹名 + 数量在前, 弹出框截断时仍可见.
+                folders.addItem(withTitle: "\(folder.folder.name)（\(folder.count)） · \(folder.folder.account)")
                 folders.lastItem?.representedObject = folder.folder.id
+                folders.lastItem?.toolTip = folders.lastItem?.title
             }
             let restored = folders.itemArray.firstIndex { ($0.representedObject as? String) == selected }
             folders.selectItem(at: restored ?? (state.folders.count == 1 ? 1 : 0))
-            if state.count <= 0 {
-                status.stringValue = "尚未同步邮件；打开右上角“同步设置”选择源文件夹。"
-            }
             scheduleSearch(immediate: true)
         } catch { status.stringValue = error.localizedDescription }
     }
@@ -212,13 +217,13 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let query = search.stringValue
         let folder = folders.selectedItem?.representedObject as? String ?? ""
         let field = fields.selectedItem?.representedObject as? String ?? "all"
-        ConfigStore.update { $0.searchQuery = query; $0.searchFolder = folder }
         queryTask = Task { [weak self] in
             if !immediate {
                 try? await Task.sleep(for: .milliseconds(160))
             }
             guard !Task.isCancelled, let self else { return }
-            loading = true; status.stringValue = "正在检索…"
+            ConfigStore.update { $0.searchQuery = query; $0.searchFolder = folder }
+            status.stringValue = engine.isSyncing ? "同步进行中，检索将在同步结束后执行…" : "正在检索…"
             let start = ContinuousClock.now
             do {
                 let result = try await engine.call(
@@ -230,138 +235,27 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     ),
                     as: SearchResult.self
                 )
+                let order = sortOrder
+                let sorted = order.key == "date" && !order.ascending ? result.items : await Task.detached {
+                    MainViewController.sorted(result.items, key: order.key, ascending: order.ascending)
+                }.value
                 guard !Task.isCancelled, sequence == version else { return }
-                let selected = table.selectedRow >= 0 && table.selectedRow < items.count ? items[table.selectedRow]
-                    .id : nil
-                items = result.items
-                table.reloadData()
-                if let selected, let row = items.firstIndex(where: { $0.id == selected }) {
-                    table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-                } else {
-                    preview = nil; header.string = ""; body.string = "选择邮件以预览正文。"
-                }
+                items = order == sortOrder ? sorted : Self.sorted(sorted, key: sortOrder.key,
+                                                                  ascending: sortOrder.ascending)
+                reloadKeepingSelection()
                 let elapsed = start.duration(to: .now)
                 let elapsedMilliseconds = Double(elapsed.components.seconds) * 1000 +
                     Double(elapsed.components.attoseconds) / 1e15
                 let totalTime = String(format: "%.1f", elapsedMilliseconds)
                 let engineTime = String(format: "%.1f", result.elapsedMs)
-                status.stringValue = "\(result.count) 封匹配 · 全量返回 \(totalTime) ms · 引擎 \(engineTime) ms"
+                status.stringValue = libraryCount <= 0
+                    ? "尚未同步邮件；打开右上角“同步设置”选择源文件夹。"
+                    : "\(result.count) 封匹配 · 全量返回 \(totalTime) ms · 引擎 \(engineTime) ms"
+                    + (result.relaxed ? " · 查询语法不完整，已按关键词检索" : "")
                 status.setAccessibilityValue(status.stringValue)
             } catch {
                 guard sequence == version else { return }
                 status.stringValue = error.localizedDescription
-            }
-            loading = false
-        }
-    }
-}
-
-extension MainViewController {
-    func numberOfRows(in _: NSTableView) -> Int {
-        items.count
-    }
-
-    func tableView(_: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row < items.count, let column = tableColumn else { return nil }
-        let item = items[row]
-        let field = column.identifier.rawValue
-        let cell = table.makeView(withIdentifier: column.identifier, owner: nil) as? NSTextField ?? label("")
-        cell.identifier = column.identifier
-        cell.font = .systemFont(ofSize: 12, weight: item.flags & 1 == 0 ? .semibold : .regular)
-        switch field {
-        case "subject": cell.stringValue = (item.complete == 0 ? "⚠ " : "") + item.subject
-        case "sender": cell.stringValue = item.sender
-        case "date": cell.stringValue = dateFormatter.string(from: Date(timeIntervalSince1970: item.date))
-        case "attachments": cell.stringValue = item.attachments == 0 ? "" : String(item.attachments)
-        default: cell.stringValue = ByteCountFormatter.string(fromByteCount: Int64(item.size), countStyle: .file)
-        }
-        cell.toolTip = cell.stringValue
-        cell.setAccessibilityIdentifier("mail-\(item.id)-\(field)")
-        return cell
-    }
-
-    func tableViewSelectionDidChange(_: Notification) {
-        previewTask?.cancel(); previewSequence += 1
-        guard table.selectedRow >= 0, table.selectedRow < items.count else { return }
-        let item = items[table.selectedRow]
-        let version = previewSequence
-        let date = dateFormatter.string(from: Date(timeIntervalSince1970: item.date))
-        header.string = [item.subject, "发件人：\(item.sender)", "收件人：\(item.recipients)",
-                         "\(date) · \(item.account)"].joined(separator: "\n")
-        body.string = "正在读取邮件…"
-        previewTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let value = try await engine.call(
-                    EngineRequest(operation: "preview", id: item.id),
-                    as: MailPreview.self
-                )
-                guard !Task.isCancelled, previewSequence == version else { return }
-                preview = value
-                attachments.removeAllItems()
-                for attachment in value.attachments {
-                    let attachmentSize = ByteCountFormatter.string(
-                        fromByteCount: Int64(attachment.size), countStyle: .file
-                    )
-                    let availability = attachment.available ? "" : "（不可用）"
-                    attachments
-                        .addItem(
-                            withTitle: "\(attachment.name) · \(attachmentSize)\(availability)"
-                        )
-                    attachments.lastItem?.representedObject = attachment.index
-                }
-                attachments.isEnabled = !value.attachments.isEmpty
-                if value.attachments.isEmpty {
-                    attachments.addItem(withTitle: "无附件")
-                }
-                updatePreviewBody()
-            } catch {
-                if previewSequence == version {
-                    body.string = error.localizedDescription
-                }
-            }
-        }
-    }
-
-    private func updatePreviewBody() {
-        guard let preview else { return }
-        body.string = previewMode.indexOfSelectedItem == 0 ? preview.ownBody : preview.body
-        body.scrollRangeToVisible(NSRange(location: 0, length: 0))
-    }
-
-    @objc
-    private func exportMessage() {
-        export(attachment: nil)
-    }
-
-    @objc
-    private func exportAttachment() {
-        guard let index = attachments.selectedItem?.representedObject as? Int,
-              preview?.attachments.first(where: { $0.index == index })?.available == true else {
-            status.stringValue = "请选择一个可用附件"; return
-        }
-        export(attachment: index)
-    }
-
-    private func export(attachment: Int?) {
-        guard table.selectedRow >= 0, table.selectedRow < items.count else { status.stringValue = "请先选择邮件"; return }
-        let item = items[table.selectedRow]
-        let panel = NSSavePanel()
-        let name = attachment.flatMap { index in preview?.attachments.first(
-            where: { $0.index == index }
-        )?.name } ?? "mail.eml"
-        panel.nameFieldStringValue = URL(fileURLWithPath: name).lastPathComponent
-        guard let window = view.window else { return }
-        panel.beginSheetModal(for: window) { [weak self] response in
-            guard response == .OK, let url = panel.url, let self else { return }
-            Task {
-                do {
-                    _ = try await engine.call(
-                        EngineRequest(operation: "export", id: item.id, path: url.path, attachment: attachment),
-                        as: EmptyResult.self
-                    )
-                    status.stringValue = "已保存：\(url.lastPathComponent)"
-                } catch { status.stringValue = error.localizedDescription }
             }
         }
     }

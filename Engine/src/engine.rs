@@ -21,7 +21,7 @@ use tantivy::{
 };
 
 const VERSION: u32 = 1;
-const PIPELINE_VERSION: u32 = 4;
+const PIPELINE_VERSION: u32 = 5;
 #[derive(Default)]
 struct MetadataCache {
     signature: String,
@@ -48,7 +48,10 @@ impl Progress {
         json!({"current":self.current.load(Ordering::Relaxed),"total":self.total.load(Ordering::Relaxed),"imported":self.imported.load(Ordering::Relaxed),"bytes":self.bytes.load(Ordering::Relaxed)})
     }
     fn check(&self) -> Result<()> {
-        ensure!(!self.cancelled.load(Ordering::Relaxed), "操作已取消");
+        ensure!(
+            !self.cancelled.load(Ordering::Relaxed),
+            "同步已取消；已提交邮件保留，下次同步继续"
+        );
         Ok(())
     }
 }
@@ -206,13 +209,21 @@ impl Engine {
             "body" => vec![f.body],
             _ => vec![f.subject, f.sender, f.recipients, f.body],
         };
+        let mut relaxed = false;
         let query: Box<dyn Query> = if text.trim().is_empty() {
             Box::new(AllQuery)
         } else {
             let mut p = QueryParser::for_index(&self.index, fields);
             p.set_conjunction_by_default();
-            p.parse_query(text)
-                .context("查询语法错误；支持关键词、\"短语\"、AND / OR / NOT")?
+            // Unfinished syntax while typing degrades to plain keywords instead of failing.
+            match p.parse_query(&escape_query(text, false)) {
+                Ok(q) => q,
+                Err(_) => {
+                    relaxed = true;
+                    p.parse_query(&escape_query(text, true))
+                        .context("查询语法错误；支持关键词、\"短语\"、AND / OR / NOT")?
+                }
+            }
         };
         let query = self.scoped(query, folder_ids);
         let searcher = self.reader.searcher();
@@ -220,7 +231,7 @@ impl Engine {
         let mut items = self.items(&searcher, &addresses)?;
         items.sort_unstable_by(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)));
         Ok(
-            json!({"items":items,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"count":addresses.len()}),
+            json!({"items":items,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"count":addresses.len(),"relaxed":relaxed}),
         )
     }
     fn scoped(&self, query: Box<dyn Query>, folders: &[String]) -> Box<dyn Query> {
@@ -307,9 +318,9 @@ impl Engine {
                     folder: it.next().unwrap(),
                     account: it.next().unwrap(),
                     folder_name: it.next().unwrap(),
-                    subject: it.next().unwrap(),
-                    sender: it.next().unwrap(),
-                    recipients: it.next().unwrap(),
+                    subject: single_line(it.next().unwrap()),
+                    sender: single_line(it.next().unwrap()),
+                    recipients: single_line(it.next().unwrap()),
                     digest: it.next().unwrap(),
                     date: numbers[0].first(doc).unwrap_or(0),
                     flags: numbers[1].first(doc).unwrap_or(0),
@@ -534,12 +545,10 @@ impl Engine {
                     .to_hex()
                     .to_string();
                 let cached = folder.imap && flags & 0x80 == 0;
-                if cached {
+                // Cache eviction is not message deletion. Preserve a previously imported body.
+                if cached && !old.contains_key(&id) {
                     unavailable += 1;
-                    // Cache eviction is not message deletion. Preserve a previously imported body.
-                    if !old.contains_key(&id) {
-                        continue;
-                    }
+                    continue;
                 }
                 let token = row.get("storeToken").cloned().unwrap_or_default();
                 let raw_store = if cached {
@@ -679,6 +688,46 @@ impl Engine {
         c.set_payload(&serde_json::to_string(manifest)?);
         c.commit()?;
         Ok(())
+    }
+}
+const QUERY_FIELDS: [&str; 4] = ["subject", "sender", "recipients", "body"];
+const QUERY_SPECIAL: &str = "+-^`:{}\"'[]()!\\*";
+/// Mail text is full of `Re:` / URLs / apostrophes: only `field:` prefixes stay syntax.
+/// `plain` escapes every operator so any input parses as keywords.
+fn escape_query(text: &str, plain: bool) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    for (i, word) in text.split_whitespace().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        if plain && matches!(word, "AND" | "OR" | "NOT") {
+            continue;
+        }
+        let field = QUERY_FIELDS.iter().find(|f| {
+            word.len() > f.len() + 1 && word.starts_with(*f) && word[f.len()..].starts_with(':')
+        });
+        for (j, c) in word.char_indices() {
+            let keep = field.is_some_and(|f| j == f.len());
+            if !keep && ((plain && QUERY_SPECIAL.contains(c)) || c == ':' || c == '\'') {
+                out.push('\\');
+            }
+            out.push(c);
+        }
+    }
+    out
+}
+/// Some senders fold line breaks into headers; list columns are single-line.
+fn single_line(s: String) -> String {
+    if s.contains(char::is_control)
+        || s.starts_with(char::is_whitespace)
+        || s.ends_with(char::is_whitespace)
+    {
+        s.split(|c: char| c.is_control() || c.is_whitespace())
+            .filter(|w| !w.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        s
     }
 }
 fn now() -> u64 {

@@ -8,6 +8,15 @@ static REPLY: LazyLock<regex::Regex> = LazyLock::new(|| {
 static ORIGINAL: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"(?i)^[-_]{3,}\s*(original message|原始邮件|原始郵件|forwarded message|转发邮件).{0,30}[-_]{3,}$").unwrap()
 });
+// Forwarded content is the message's own payload; stripping it would make it unsearchable.
+static FORWARD_SUBJECT: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"(?i)^\s*(fwd?|转发|轉寄|転送)\s*[:：]").unwrap());
+static FORWARD_SEPARATOR: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(
+        r"(?im)^\s*[-_]{3,}\s*(forwarded message|转发的邮件|轉寄的郵件|転送されたメッセージ)",
+    )
+    .unwrap()
+});
 #[derive(Serialize)]
 pub struct Attachment {
     pub index: u32,
@@ -66,6 +75,14 @@ pub fn strip_text(text: &str, mut reply: bool) -> String {
     out.join("\n").trim().to_owned()
 }
 pub fn own_text(message: &mail_parser::Message<'_>) -> String {
+    let full = message.body_text(0).unwrap_or_default();
+    if message
+        .subject()
+        .is_some_and(|s| FORWARD_SUBJECT.is_match(s))
+        || FORWARD_SEPARATOR.is_match(&full)
+    {
+        return full.trim().to_owned();
+    }
     let reply = !matches!(message.in_reply_to(), mail_parser::HeaderValue::Empty)
         || !matches!(message.references(), mail_parser::HeaderValue::Empty);
     // Structural HTML quote removal keeps new inline responses outside quote nodes.
@@ -98,7 +115,7 @@ pub fn own_text(message: &mail_parser::Message<'_>) -> String {
             return strip_text(&t, reply);
         }
     }
-    strip_text(&message.body_text(0).unwrap_or_default(), reply)
+    strip_text(&full, reply)
 }
 pub fn addresses(a: Option<&mail_parser::Address<'_>>) -> String {
     a.map(|a| {

@@ -193,6 +193,8 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
                 status.stringValue = "同步完成 · \(total) 封本地邮件 · 新增／更新 \(updated)"
                     + " · \(missing) 封正文未下载 · \(elapsed) s"
                 progress.doubleValue = 1
+            } catch is CancellationError {
+                status.stringValue = "同步已取消；已提交邮件保留，下次同步继续"
             } catch { status.stringValue = error.localizedDescription }
             progressTask?.cancel(); progressTask = nil
             syncing = false
@@ -215,21 +217,15 @@ final class SettingsViewController: NSViewController, NSTableViewDataSource, NST
             $0.bundleIdentifier == "org.mozilla.thunderbird" || $0.executableURL?.path
                 .contains("Thunderbird.app/Contents/MacOS/") == true
         }
+        // 仅正常退出; 强制结束可能中断 Thunderbird 写入 .msf / mbox, 损坏同步源.
         for app in processes { _ = app.terminate() }
-        for _ in 0..<100 {
+        for _ in 0..<300 {
             try Task.checkCancellation()
             if processes.allSatisfy(\.isTerminated) {
                 return
             }
             try await Task.sleep(for: .milliseconds(100))
         }
-        for app in processes where !app.isTerminated { _ = app.forceTerminate() }
-        for _ in 0..<50 {
-            if processes.allSatisfy(\.isTerminated) {
-                return
-            }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        throw EngineError(message: "Thunderbird 未退出，同步未开始")
+        throw EngineError(message: "Thunderbird 30 秒内未退出（可能有未保存的草稿）；请手动退出后重试")
     }
 }

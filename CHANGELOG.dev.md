@@ -7,6 +7,27 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Added
+
+- 结果列表支持点击列头排序；⌘F 聚焦搜索，↓ / ↩ 进入结果列表；补齐复制 / 粘贴 / 全选快捷键。
+  - `NSSortDescriptor` 原型列排序 (AX 表头可按)；补 Edit 菜单 nil-target 响应链；结果表改单选。
+
+### Fixed
+
+- 转发邮件的被转发内容可被检索；含 `Re:`、网址、撇号或未写完的查询不再报语法错误。
+  - `own_text` 遇 Fwd 主题 / 转发分隔线保留全文；`PIPELINE_VERSION` 5 触发一次全量重导。
+  - 非字段名 `:` 与 `'` 转义；严格解析失败回退全转义关键词并返回 `relaxed`。
+- 同步不再强制结束 Thunderbird；取消 / 空库提示更清晰；切换邮件时附件与预览保持一致；含换行的主题正常显示。
+  - 仅 `terminate()` + 30 s 超时报错；`CancellationError` 单独提示；选中按邮件 ID 重定位。
+  - 保留的已缓存原文不再计入「正文未下载」；`ownBody` 为空回退完整正文；列表字段控制符 / 首尾空白归一。
+
+### Changed
+
+- 文件夹下拉优先显示文件夹名与数量；同步期间检索 / 预览显示排队状态。
+  - `MailEngine.isSyncing`；检索状态写入 state.json 改为防抖后执行；结果排序移出主线程。
+
 ## [0.2.0] - 2026-10-13
 
 ### Added
