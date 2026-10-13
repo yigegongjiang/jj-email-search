@@ -74,19 +74,24 @@ extension MainViewController {
     }
 
     func tableViewSelectionDidChange(_: Notification) {
+        guard !reloadingResults else { return }
         let item = table.selectedRow >= 0 && table.selectedRow < items.count ? items[table.selectedRow] : nil
         // 同一邮件重新定位行号时保留已加载预览.
         guard item?.id != previewID || item == nil else { return }
         previewTask?.cancel(); previewSequence += 1
+        highlightTask?.cancel(); highlightSequence += 1
         previewID = item?.id; preview = nil
         attachments.removeAllItems(); attachments.addItem(withTitle: "无附件"); attachments.isEnabled = false
         headerScroll?.isHidden = item == nil
         updateActions()
         guard let item else {
-            header.string = ""; body.string = placeholder; return
+            header.string = ""; body.string = placeholder
+            updatePreviewHighlights()
+            return
         }
         let version = previewSequence
         header.textStorage?.setAttributedString(headerText(item))
+        updatePreviewHighlights()
         body.string = engine.isSyncing ? "同步进行中，预览将在同步结束后读取…" : "正在读取邮件…"
         previewTask = Task { [weak self] in
             guard let self else { return }
@@ -159,6 +164,7 @@ extension MainViewController {
         let own = preview.ownBody.trimmingCharacters(in: .whitespacesAndNewlines)
         body.string = previewMode.indexOfSelectedItem == 0 && !own.isEmpty ? preview.ownBody : preview.body
         body.scrollRangeToVisible(NSRange(location: 0, length: 0))
+        updatePreviewHighlights(scrollToMatch: true)
     }
 
     @objc
@@ -201,6 +207,11 @@ extension MainViewController {
     /// reloadData 按行号保留选中; 按邮件 ID 重新定位, 不在结果中则清空预览.
     func reloadKeepingSelection() {
         let selected = previewID
+        reloadingResults = true
+        defer {
+            reloadingResults = false
+            tableViewSelectionDidChange(Notification(name: NSTableView.selectionDidChangeNotification, object: table))
+        }
         table.reloadData()
         if let selected, let row = items.firstIndex(where: { $0.id == selected }) {
             table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)

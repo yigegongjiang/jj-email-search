@@ -225,13 +225,14 @@ impl Engine {
                 }
             }
         };
+        let highlight_terms = crate::highlight::terms(query.as_ref(), &self.index.schema());
         let query = self.scoped(query, folder_ids);
         let searcher = self.reader.searcher();
         let addresses = searcher.search(&query, &AllIds)?;
         let mut items = self.items(&searcher, &addresses)?;
         items.sort_unstable_by(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)));
         Ok(
-            json!({"items":items,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"count":addresses.len(),"relaxed":relaxed}),
+            json!({"items":items,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"count":addresses.len(),"relaxed":relaxed,"highlight_terms":highlight_terms}),
         )
     }
     fn scoped(&self, query: Box<dyn Query>, folders: &[String]) -> Box<dyn Query> {

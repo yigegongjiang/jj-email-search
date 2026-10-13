@@ -7,6 +7,18 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
+## [Unreleased]
+
+### Added
+
+- 检索后高亮右侧邮件头与正文中的匹配词，遵循字段限定与排除条件；正文定位到首个匹配处。
+  - 引擎返回正向查询词，复用 MixedTokenizer + LowerCaser 计算 UTF-16 范围；异步预览高亮带版本校验与 AX 命中数。
+
+### Fixed
+
+- 调整检索条件或排序后，保留仍在结果中的选中邮件及预览。
+  - `reloadKeepingSelection` 抑制 reload 期间的中间 selection 回调，恢复 ID 后统一更新预览。
+
 ## [0.2.7] - 2026-10-13
 
 ### Changed

@@ -83,6 +83,13 @@ pub fn dispatch(engine: &mut Engine, v: &Value) -> Result<Value> {
                 v.get("field").and_then(Value::as_str).unwrap_or("all"),
             )
         }
+        "highlight" => {
+            let texts =
+                serde_json::from_value::<Vec<crate::highlight::HighlightText>>(v["texts"].clone())?;
+            let terms =
+                serde_json::from_value::<Vec<crate::highlight::HighlightTerm>>(v["terms"].clone())?;
+            Ok(json!({"ranges": crate::highlight::ranges(&texts, &terms)}))
+        }
         "preview" => engine.preview(get_str(v, "id")?),
         "export" => engine.export(
             get_str(v, "id")?,

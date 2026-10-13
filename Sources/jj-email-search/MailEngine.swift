@@ -54,10 +54,26 @@ struct SearchResult: Decodable, Sendable {
     let count: Int
     /// 查询语法不完整时按纯关键词检索.
     let relaxed: Bool
+    let highlightTerms: [HighlightTerm]
     enum CodingKeys: String, CodingKey {
         case items, count, relaxed
         case elapsedMs = "elapsed_ms"
+        case highlightTerms = "highlight_terms"
     }
+}
+
+struct HighlightTerm: Codable, Sendable {
+    let field: String
+    let text: String
+}
+
+struct HighlightResult: Decodable, Sendable {
+    struct Range: Decodable, Sendable {
+        let location: Int
+        let length: Int
+    }
+
+    let ranges: [[Range]]
 }
 
 struct MailAttachment: Decodable, Sendable {
@@ -110,9 +126,11 @@ struct EngineRequest: Encodable, Sendable {
     var id: String?
     var path: String?
     var attachment: Int?
+    var terms: [HighlightTerm]?
+    var texts: [HighlightTerm]?
     enum CodingKeys: String, CodingKey {
         case operation = "op"
-        case root, folders, query, field, id, path, attachment
+        case root, folders, query, field, id, path, attachment, terms, texts
     }
 }
 

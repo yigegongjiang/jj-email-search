@@ -24,6 +24,10 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     var previewTask: Task<Void, Never>?
     private var sequence = 0
     var previewSequence = 0
+    var highlightTerms: [HighlightTerm] = []
+    var highlightTask: Task<Void, Never>?
+    var highlightSequence = 0
+    var reloadingResults = false
     private var loadedLibrary = false
     let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -241,6 +245,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 items = order == sortOrder ? sorted : Self.sorted(sorted, key: sortOrder.key,
                                                                   ascending: sortOrder.ascending)
                 reloadKeepingSelection()
+                updateSearchHighlights(result)
                 let elapsed = start.duration(to: .now)
                 let elapsedMilliseconds = Double(elapsed.components.seconds) * 1000 +
                     Double(elapsed.components.attoseconds) / 1e15

@@ -11,6 +11,16 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- 检索后高亮右侧邮件头与正文中的匹配词，遵循字段限定与排除条件；正文定位到首个匹配处。
+
+### Fixed
+
+- 调整检索条件或排序后，保留仍在结果中的选中邮件及预览。
+
 ## [0.2.7] - 2026-10-13
 
 ### Changed
