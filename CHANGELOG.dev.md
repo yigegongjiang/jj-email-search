@@ -7,7 +7,7 @@
 
 # Changelog (developer, follow [CHANGELOG.md](./CHANGELOG.md))
 
-## [Unreleased]
+## [0.2.12] - 2026-10-14
 
 ### Changed
 
