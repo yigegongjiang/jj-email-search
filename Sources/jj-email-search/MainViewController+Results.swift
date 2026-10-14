@@ -6,8 +6,8 @@ extension MainViewController {
         settings.setAccessibilityIdentifier("open-sync-settings")
         let save = NSButton(title: "导出邮件", target: self, action: #selector(exportMessage))
         save.setAccessibilityIdentifier("export-mail")
-        let attachment = NSButton(title: "保存附件", target: self, action: #selector(exportAttachment))
-        attachment.setAccessibilityIdentifier("save-attachment")
+        let attachment = NSButton(title: "保存全部附件", target: self, action: #selector(saveAllAttachments))
+        attachment.setAccessibilityIdentifier("save-attachments")
         exportButton = save; attachmentButton = attachment
         titlebarControls(window, [save, attachment, settings])
         updateActions()
@@ -21,11 +21,6 @@ extension MainViewController {
     @objc
     func previewChanged() {
         updatePreviewBody()
-    }
-
-    @objc
-    func attachmentChanged() {
-        updateActions()
     }
 
     func focusSearch() {
@@ -138,13 +133,12 @@ extension MainViewController {
             : "选择邮件以预览正文。所有内容均来自本地，不加载远程资源。"
     }
 
-    /// 导出 / 保存附件仅在可执行时启用; 与 `export` / `exportAttachment` 守卫一致.
+    /// 导出 / 保存附件仅在可执行时启用; 与 `exportMessage` / `saveAllAttachments` 守卫一致.
     func updateActions() {
         let hasMail = table.selectedRow >= 0 && table.selectedRow < items.count
         exportButton?.isEnabled = hasMail
-        let index = attachments.selectedItem?.representedObject as? Int
-        attachmentButton?.isEnabled = hasMail && preview?.attachments
-            .first(where: { $0.index == index })?.available == true
+        attachmentButton?.isEnabled = hasMail && !savingAttachments
+            && preview?.attachments.contains(where: \.available) == true
     }
 
     private func headerText(_ item: MailItem) -> NSAttributedString {
@@ -173,39 +167,88 @@ extension MainViewController {
 
     @objc
     func exportMessage() {
-        export(attachment: nil)
-    }
-
-    @objc
-    func exportAttachment() {
-        guard let index = attachments.selectedItem?.representedObject as? Int,
-              preview?.attachments.first(where: { $0.index == index })?.available == true else {
-            status.stringValue = "请选择一个可用附件"; return
-        }
-        export(attachment: index)
-    }
-
-    func export(attachment: Int?) {
         guard table.selectedRow >= 0, table.selectedRow < items.count else { status.stringValue = "请先选择邮件"; return }
         let item = items[table.selectedRow]
         let panel = NSSavePanel()
-        let name = attachment.flatMap { index in preview?.attachments.first(
-            where: { $0.index == index }
-        )?.name } ?? "mail.eml"
-        panel.nameFieldStringValue = URL(fileURLWithPath: name).lastPathComponent
+        panel.nameFieldStringValue = "mail.eml"
         guard let window = view.window else { return }
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             Task {
                 do {
                     _ = try await engine.call(
-                        EngineRequest(operation: "export", id: item.id, path: url.path, attachment: attachment),
+                        EngineRequest(operation: "export", id: item.id, path: url.path),
                         as: EmptyResult.self
                     )
                     status.stringValue = "已保存：\(url.lastPathComponent)"
                 } catch { status.stringValue = error.localizedDescription }
             }
         }
+    }
+
+    /// 选择目录后逐个导出全部可用附件; 点击时快照邮件 ID + 附件列表, 保存中切换邮件不串号.
+    @objc
+    func saveAllAttachments() {
+        guard table.selectedRow >= 0, table.selectedRow < items.count, let preview,
+              previewID == items[table.selectedRow].id else { status.stringValue = "请先选择邮件"; return }
+        let id = items[table.selectedRow].id
+        let available = preview.attachments.filter(\.available)
+        let skipped = preview.attachments.count - available.count
+        guard !available.isEmpty, let window = view.window else { status.stringValue = "没有可用附件"; return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false; panel.canChooseDirectories = true
+        panel.canCreateDirectories = true; panel.allowsMultipleSelection = false
+        panel.prompt = "保存到此处"
+        panel.message = "保存 \(available.count) 个附件到所选文件夹，同名文件自动编号，不覆盖"
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let directory = panel.url, let self else { return }
+            savingAttachments = true; updateActions()
+            Task {
+                var used = Set<String>()
+                var saved = 0
+                var failures: [String] = []
+                for (position, attachment) in available.enumerated() {
+                    status.stringValue = "正在保存附件 \(position + 1)/\(available.count)…"
+                    let url = Self.uniqueURL(in: directory, name: attachment.name, used: &used)
+                    do {
+                        _ = try await engine.call(
+                            EngineRequest(operation: "export", id: id, path: url.path, attachment: attachment.index),
+                            as: EmptyResult.self
+                        )
+                        saved += 1
+                    } catch { failures.append("\(attachment.name)：\(error.localizedDescription)") }
+                }
+                var summary = "已保存 \(saved) 个附件到「\(directory.lastPathComponent)」"
+                if skipped > 0 {
+                    summary += " · 跳过不可用 \(skipped) 个"
+                }
+                if !failures.isEmpty {
+                    summary += " · 失败 \(failures.count) 个：" + failures.joined(separator: "；")
+                }
+                status.stringValue = summary
+                savingAttachments = false; updateActions()
+            }
+        }
+    }
+
+    /// 清洗附件名 (路径分隔符 -> `_`, 去隐藏前缀) + 同批次与目录内已有文件去重 (APFS 默认大小写不敏感).
+    private static func uniqueURL(in directory: URL, name: String, used: inout Set<String>) -> URL {
+        var base = name.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
+        while base.hasPrefix(".") { base.removeFirst() }
+        if base.trimmingCharacters(in: .whitespaces).isEmpty {
+            base = "attachment"
+        }
+        let ext = (base as NSString).pathExtension
+        let stem = (base as NSString).deletingPathExtension
+        var candidate = base
+        var number = 2
+        while used.contains(candidate.lowercased())
+            || FileManager.default.fileExists(atPath: directory.appendingPathComponent(candidate).path) {
+            candidate = ext.isEmpty ? "\(stem) (\(number))" : "\(stem) (\(number)).\(ext)"
+            number += 1
+        }
+        used.insert(candidate.lowercased())
+        return directory.appendingPathComponent(candidate)
     }
 
     /// reloadData 按行号保留选中; 按邮件 ID 重新定位, 不在结果中则清空预览.

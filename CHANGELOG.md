@@ -11,6 +11,12 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- 「保存附件」改为「保存全部附件」：选择一个文件夹即保存本封邮件的全部可用附件，同名文件自动编号，不覆盖已有文件。
+
 ## [0.2.11] - 2026-10-13
 
 ### Added

@@ -19,6 +19,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     var previewID: String?
     var exportButton: NSButton?
     var attachmentButton: NSButton?
+    var savingAttachments = false
     var libraryCount = 0
     private var queryTask: Task<Void, Never>?
     var previewTask: Task<Void, Never>?
@@ -138,8 +139,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         attachments.addItem(withTitle: "无附件")
         attachments.setAccessibilityIdentifier("mail-attachments")
         attachments.isEnabled = false
-        attachments.target = self; attachments.action = #selector(attachmentChanged)
-        attachments.toolTip = "选择附件后点击右上角「保存附件」"
+        attachments.toolTip = "附件列表；点击右上角「保存全部附件」批量保存到文件夹"
         let controls = NSStackView(views: [previewMode, attachments])
         controls.spacing = 6
         for text in [header, body] {
